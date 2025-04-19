@@ -24,6 +24,7 @@ class Worker(models.Model):
     
 class Product(models.Model):
     name = models.CharField(max_length=255)  # Name of the product
+    image=models.ImageField(upload_to="Luxury-Images", blank=True, null=True)
     category=models.CharField(max_length=20, blank=True, null=True)
     description = models.TextField(blank=True)  # Description of the product
     price = models.DecimalField(max_digits=10, decimal_places=2)  # Price of the product
