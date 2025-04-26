@@ -155,10 +155,14 @@ class TotalGoodsSoldView(generics.GenericAPIView):
         total_sold_price = Transaction.objects.filter(
             timestamp__range=(start_date, end_date)
         ).aggregate(total_price=Sum('subtotal'))['total_price'] or 0
+        
+        low_stock_count = Product.objects.filter(stock_quantity__in=[0, 1, 2]).count()
+
 
         return Response({
             "total_goods_sold": total_sold_quantity,
-            "total_price": total_sold_price
+            "total_price": total_sold_price,
+            "low_stock":low_stock_count
         }, status=status.HTTP_200_OK)
     
 class FilterScannedItemsByCategoryView(generics.ListAPIView):
@@ -178,31 +182,18 @@ class ListAllSalesView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = Transaction.objects.all()
-        filter_type = self.request.query_params.get('filter', None)
-        category_name = self.request.query_params.get('category', None)
-        name = self.request.query_params.get('name', None)
+        date_str = self.request.query_params.get('date', None)  # Get the date parameter
 
-        # Filter by date range
-        if filter_type:
-            today = timezone.now().date()
-            if filter_type == 'day':
-                queryset = queryset.filter(timestamp__date=today)
-            elif filter_type == 'week':
-                start_date = today - timedelta(days=today.weekday())
-                end_date = start_date + timedelta(days=7)
-                queryset = queryset.filter(timestamp__range=(start_date, end_date))
-            elif filter_type == 'month':
-                start_date = today.replace(day=1)
-                end_date = (start_date + timedelta(days=31)).replace(day=1)
-                queryset = queryset.filter(timestamp__range=(start_date, end_date))
+        # Filter by specific date
+        if date_str:
+            try:
+                selected_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
+                queryset = queryset.filter(timestamp__date=selected_date)
+            except ValueError:
+                return Transaction.objects.none()  # Return an empty queryset if the date format is invalid
 
-        # Filter by category
-        if category_name:
-            queryset = queryset.filter(scanned_items__product__category__name__icontains=category_name)
-
-        # Filter by name
-        if name:
-            queryset = queryset.filter(customer_name__icontains=name)
+        # Order by timestamp descending (most recent first)
+        queryset = queryset.order_by('-timestamp')
 
         return queryset
     
@@ -213,3 +204,46 @@ class FilterProductsByQuantityView(generics.ListAPIView):
     def get_queryset(self):
         # Filter for quantities of 2, 1, or 0
         return Product.objects.filter(stock_quantity__in=[0, 1, 2])
+    
+    
+class CategorySalesReportView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        filter_type = request.query_params.get('filter', 'day')
+        today = timezone.now().date()
+
+        if filter_type == 'day':
+            start_date = today
+            end_date = today + timedelta(days=1)
+        elif filter_type == 'week':
+            start_date = today - timedelta(days=today.weekday())
+            end_date = start_date + timedelta(days=7)
+        elif filter_type == 'month':
+            start_date = today.replace(day=1)
+            end_date = (start_date + timedelta(days=31)).replace(day=1)
+        else:
+            return Response({"detail": "Invalid filter type."}, status=status.HTTP_400_BAD_REQUEST)
+
+        scanned_items = ScannedItem.objects.filter(
+            transaction__timestamp__range=(start_date, end_date)
+        ).select_related('product')
+
+        category_data = {}
+
+        for item in scanned_items:
+            # Normalize category: lowercase and remove surrounding spaces
+            category_name = (item.product.category or 'Uncategorized').strip().lower()
+
+            item_total_price = item.quantity * item.price_at_sale
+
+            if category_name not in category_data:
+                category_data[category_name] = {
+                    "total_quantity_sold": 0,
+                    "total_amount_made": 0
+                }
+
+            category_data[category_name]["total_quantity_sold"] += item.quantity
+            category_data[category_name]["total_amount_made"] += float(item_total_price)
+
+        return Response(category_data, status=status.HTTP_200_OK)

@@ -24,16 +24,7 @@ class LuxuryBranchSerializer(serializers.ModelSerializer):
         model = LuxuryBranch
         fields = '__all__'  # Include all fields from the LuxuryBranch model
 
-class SaleSerializer(serializers.ModelSerializer):
-    staff = WorkerSerializer()  
-    
-    class Meta:
-        model = Transaction
-        fields = ['staff', 'subtotal', 'discount',  'customer_name', 'customer_contact']  # Removed scanned_items
 
-    def validate(self, data):
-        # You can add custom validation logic here if needed
-        return data 
     
 class SaleSerializerr(serializers.ModelSerializer): 
     
@@ -51,3 +42,15 @@ class ScannedItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScannedItem
         fields = ['product', 'quantity']  # Include product and quantity, you can add more fields if needed
+        
+        
+class SaleSerializer(serializers.ModelSerializer):
+    staff = WorkerSerializer()  
+    scanned_items = ScannedItemSerializer(many=True)
+    class Meta:
+        model = Transaction
+        fields = ['staff', 'subtotal', 'discount',  'customer_name', 'customer_contact','scanned_items']  # Removed scanned_items
+
+    def validate(self, data):
+        # You can add custom validation logic here if needed
+        return data 

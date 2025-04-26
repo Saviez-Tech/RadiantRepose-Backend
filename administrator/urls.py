@@ -15,6 +15,7 @@ urlpatterns = [
     path('scanned-items/category/', FilterScannedItemsByCategoryView.as_view(), name='filter-scanned-items'),
     path('sales/', ListAllSalesView.as_view(), name='list-all-sales'),
     path('products/low-quantity/', FilterProductsByQuantityView.as_view(), name='filter-products-by-quantity'),  # New endpoint
+    path('category-sales-report/', CategorySalesReportView.as_view(), name='category-sales-report'),
 ] 
 
 

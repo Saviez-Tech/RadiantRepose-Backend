@@ -51,6 +51,7 @@ class ScannedItem(models.Model):
     transaction = models.ForeignKey(Transaction, related_name='scanned_items', on_delete=models.CASCADE)  # Link to the transaction
     product = models.ForeignKey(Product, on_delete=models.CASCADE)  # Link to the product
     quantity = models.PositiveIntegerField()  # Quantity of the item
+    price_at_sale = models.DecimalField(max_digits=10, decimal_places=2,default=0)
 
    
 

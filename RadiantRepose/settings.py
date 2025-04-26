@@ -28,7 +28,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG =  True
 
-ALLOWED_HOSTS = ["https://radiantrepose-backend.onrender.com","radiantrepose-backend.onrender.com"]
+ALLOWED_HOSTS = ["https://radiantrepose-backend.onrender.com","radiantrepose-backend.onrender.com","*"]
 
 
 # Application definition

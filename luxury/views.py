@@ -21,35 +21,48 @@ class SalesView(APIView):
             return Response({"detail": "User is not a worker."}, status=status.HTTP_403_FORBIDDEN)
 
         request.data['staff'] = worker.id
+        scanned_items_data = request.data.get('scanned_items', [])
 
         with transaction.atomic():
+            # 1. First, check if all products exist and have enough stock
+            products = {}
+            for item in scanned_items_data:
+                try:
+                    product = Product.objects.get(id=item['product_id'])
+                    products[item['product_id']] = product  # cache it so we don't re-query
+                except Product.DoesNotExist:
+                    return Response(
+                        {"detail": f"Product with ID {item['product_id']} does not exist."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                if item['quantity'] > product.stock_quantity:
+                    return Response(
+                        {"detail": f"Insufficient stock for {product.name}. Available stock: {product.stock_quantity}."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # 2. Now save the sale transaction
             serializer = SaleSerializerr(data=request.data)
             if serializer.is_valid():
                 transaction_instance = serializer.save()
 
-                scanned_items_data = request.data.get('scanned_items', [])
+                # 3. Now create the scanned items and update stock
                 for item in scanned_items_data:
-                    product = Product.objects.get(id=item['product_id'])  # Get the product by ID
+                    product = products[item['product_id']]
 
-                    # Check if the requested quantity exceeds available stock_quantity
-                    if item['quantity'] > product.stock_quantity:
-                        return Response(
-                            {"detail": f"Insufficient stock for {product.name}. Available stock: {product.stock_quantity}."},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-
-                    # Create the ScannedItem
-                    scanned_item = ScannedItem.objects.create(
+                    ScannedItem.objects.create(
                         transaction=transaction_instance,
-                        product=product,  # Use the product foreign key
-                        quantity=item['quantity']
+                        product=product,
+                        quantity=item['quantity'],
+                        price_at_sale=product.price
                     )
 
-                    # Reduce the product stock_quantity
                     product.stock_quantity -= item['quantity']
-                    product.save()  # Save the updated product
+                    product.save()
 
                 return Response({"transaction_id": transaction_instance.id}, status=status.HTTP_201_CREATED)
+
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
     def get(self, request):
