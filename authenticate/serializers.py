@@ -5,13 +5,26 @@ from luxury.models import Worker
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
-    password = serializers.CharField()
+    password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
-        user = authenticate(**attrs)
+        username = attrs.get('username')
+        password = attrs.get('password')
+
+        user = authenticate(username=username, password=password)
+
         if user is None:
+            # Check if username exists but account is disabled
+            try:
+                user_obj = User.objects.get(username=username)
+                if not user_obj.is_active:
+                    raise serializers.ValidationError("Your account has been disabled.")
+            except User.DoesNotExist:
+                pass
+
             raise serializers.ValidationError("Invalid credentials")
-        return user 
+        
+        return user
 
 class RegisterSerializer(serializers.ModelSerializer):
     phone_number = serializers.CharField(required=True)

@@ -16,6 +16,10 @@ urlpatterns = [
     path('sales/', ListAllSalesView.as_view(), name='list-all-sales'),
     path('products/low-quantity/', FilterProductsByQuantityView.as_view(), name='filter-products-by-quantity'),  # New endpoint
     path('category-sales-report/', CategorySalesReportView.as_view(), name='category-sales-report'),
+    
+    path('worker-update/<int:pk>/', WorkerUpdateAPIView.as_view(), name='worker-update'),
+    path('worker-disable/<int:pk>/', WorkerDisableAPIView.as_view(), name='worker-disable'),
+    path('worker-enable/<int:pk>/', WorkerEnableAPIView.as_view(), name='worker-disable'),
 ] 
 
 

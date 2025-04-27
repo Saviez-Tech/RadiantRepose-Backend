@@ -3,13 +3,14 @@ from rest_framework import generics
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from luxury.models import Product, LuxuryBranch,ScannedItem,Transaction
-from luxury.serializers import ProductSerializer, LuxuryBranchSerializer,ScannedItemSerializer,SaleSerializer
+from luxury.models import Product, LuxuryBranch,ScannedItem,Transaction,Worker
+from luxury.serializers import ProductSerializer, LuxuryBranchSerializer,ScannedItemSerializer,SaleSerializer,WorkerSerializer
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsAdminUser  # Import the custom permission
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Sum
+from django.shortcuts import get_object_or_404
 # Create your views here.
 
 class ProductView(APIView):
@@ -247,3 +248,30 @@ class CategorySalesReportView(generics.GenericAPIView):
             category_data[category_name]["total_amount_made"] += float(item_total_price)
 
         return Response(category_data, status=status.HTTP_200_OK)
+    
+    
+class WorkerUpdateAPIView(generics.UpdateAPIView):
+    queryset = Worker.objects.all()
+    serializer_class = WorkerSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+
+class WorkerDisableAPIView(APIView):
+    permission_classes = [IsAuthenticated,IsAdminUser]
+
+    def post(self, request, pk):
+        worker = get_object_or_404(Worker, pk=pk)
+        user = worker.user
+        user.is_active = False
+        user.save()
+        return Response({"message": "Worker account disabled successfully."}, status=status.HTTP_200_OK)
+    
+class WorkerEnableAPIView(APIView):
+    permission_classes = [IsAuthenticated,IsAdminUser]
+
+    def post(self, request, pk):
+        worker = get_object_or_404(Worker, pk=pk)
+        user = worker.user
+        user.is_active = True
+        user.save()
+        return Response({"message": "Worker account enabled successfully."}, status=status.HTTP_200_OK)
