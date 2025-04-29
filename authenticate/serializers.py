@@ -3,6 +3,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from luxury.models import Worker
 
+
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)
@@ -11,21 +12,26 @@ class LoginSerializer(serializers.Serializer):
         username = attrs.get('username')
         password = attrs.get('password')
 
+        if not username or not password:
+            raise serializers.ValidationError("Both username and password are required.")
+
         user = authenticate(username=username, password=password)
+        if user:
+            if not user.is_active:
+                raise serializers.ValidationError("Your account has been disabled.")
+            return user
 
-        if user is None:
-            # Check if username exists but account is disabled
-            try:
-                user_obj = User.objects.get(username=username)
-                if not user_obj.is_active:
-                    raise serializers.ValidationError("Your account has been disabled.")
-            except User.DoesNotExist:
-                pass
+        # Custom error depending on what exists
+        try:
+            user_obj = User.objects.get(username=username)
+            if not user_obj.check_password(password):
+                raise serializers.ValidationError("Invalid password.")
+        except User.DoesNotExist:
+            raise serializers.ValidationError("User with this username does not exist.")
 
-            raise serializers.ValidationError("Invalid credentials")
-        
-        return user
-
+        raise serializers.ValidationError("Invalid credentials.")
+    
+    
 class RegisterSerializer(serializers.ModelSerializer):
     phone_number = serializers.CharField(required=True)
     address = serializers.CharField(required=True)
