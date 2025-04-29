@@ -16,6 +16,7 @@ from supabase import create_client
 from rest_framework.authentication import TokenAuthentication
 import urllib.parse
 from rest_framework.exceptions import ValidationError
+from .serializers import ScannedItemWithTransactionSerializer
 
 supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
@@ -205,23 +206,19 @@ class FilterScannedItemsByCategoryView(generics.ListAPIView):
         return ScannedItem.objects.none()  # Return an empty queryset if no category is provided
 
 class ListAllSalesView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = SaleSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    serializer_class = ScannedItemWithTransactionSerializer
 
     def get_queryset(self):
-        queryset = Transaction.objects.all()
-        date_str = self.request.query_params.get('date', None)  # Get the date parameter
+        queryset = ScannedItem.objects.select_related('transaction').order_by('-transaction__id')
+        date_str = self.request.query_params.get('date', None)
 
-        # Filter by specific date
         if date_str:
             try:
                 selected_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
-                queryset = queryset.filter(timestamp__date=selected_date)
+                queryset = queryset.filter(transaction__timestamp__date=selected_date)
             except ValueError:
-                return Transaction.objects.none()  # Return an empty queryset if the date format is invalid
-
-        # Order by timestamp descending (most recent first)
-        queryset = queryset.order_by('-timestamp')
+                return ScannedItem.objects.none()  # Invalid date format
 
         return queryset
     
