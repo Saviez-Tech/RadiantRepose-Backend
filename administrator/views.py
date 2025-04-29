@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from luxury.models import Product, LuxuryBranch,ScannedItem,Transaction,Worker
-from luxury.serializers import ProductSerializer, LuxuryBranchSerializer,ScannedItemSerializer,SaleSerializer,WorkerSerializer
+from luxury.serializers import ProductSerializer, LuxuryBranchSerializer,ScannedItemSerializer,SaleSerializer,WorkerSerializer,WorkerSerializerr
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsAdminUser  # Import the custom permission
 from django.utils import timezone
@@ -300,3 +300,12 @@ class WorkerEnableAPIView(APIView):
         user.is_active = True
         user.save()
         return Response({"message": "Worker account enabled successfully."}, status=status.HTTP_200_OK)
+    
+    
+class WorkerListAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        workers = Worker.objects.all()
+        serializer = WorkerSerializerr(workers, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

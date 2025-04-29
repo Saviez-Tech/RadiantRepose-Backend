@@ -20,6 +20,7 @@ urlpatterns = [
     path('worker-update/<int:pk>/', WorkerUpdateAPIView.as_view(), name='worker-update'),
     path('worker-disable/<int:pk>/', WorkerDisableAPIView.as_view(), name='worker-disable'),
     path('worker-enable/<int:pk>/', WorkerEnableAPIView.as_view(), name='worker-disable'),
+    path('worker-list/',WorkerListAPIView.as_view(),name="worker-list"),
 ] 
 
 

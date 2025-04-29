@@ -2,10 +2,21 @@ from rest_framework import serializers
 from .models import Product, LuxuryBranch, Transaction, ScannedItem,Worker
 
 
+class BranchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LuxuryBranch
+        fields = "__all__"
+
 class WorkerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Worker
         fields = ['id', 'name', 'phone_number', 'address']  # Include relevant fields
+        
+class WorkerSerializerr(serializers.ModelSerializer):
+    branch = BranchSerializer()
+    class Meta:
+        model = Worker
+        fields = "__all__" # Include relevant fields
 
 
 class ProductSerializer(serializers.ModelSerializer):
