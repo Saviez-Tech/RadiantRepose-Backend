@@ -15,6 +15,7 @@ from django.conf import settings
 from supabase import create_client
 from rest_framework.authentication import TokenAuthentication
 import urllib.parse
+from rest_framework.exceptions import ValidationError
 
 supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
@@ -46,10 +47,11 @@ class ProductView(APIView):
 
         if serializer.is_valid():
             product = serializer.save()
-
             return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Flatten and return the first error message in a clean format
+        first_error = next(iter(serializer.errors.values()))[0]
+        raise ValidationError({"detail": str(first_error)})
     
     def put(self, request, product_id):
         try:
