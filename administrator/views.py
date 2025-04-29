@@ -309,5 +309,9 @@ class WorkerListAPIView(APIView):
 
     def get(self, request):
         workers = Worker.objects.all()
-        serializer = WorkerSerializerr(workers, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = []
+        for worker in workers:
+            serialized = WorkerSerializerr(worker).data
+            serialized["status"] = "Active" if worker.user.is_active else "Inactive"
+            data.append(serialized)
+        return Response(data, status=status.HTTP_200_OK)
