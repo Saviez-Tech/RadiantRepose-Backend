@@ -90,8 +90,21 @@ class SaleSerializer(serializers.ModelSerializer):
     scanned_items = ScannedItemSerializer(many=True)
     class Meta:
         model = Transaction
-        fields = ['staff', 'subtotal', 'discount',  'customer_name', 'customer_contact','scanned_items']  # Removed scanned_items
+        fields = ['staff', 'subtotal', 'discount',  'customer_name','timestamp', 'customer_contact','scanned_items']  # Removed scanned_items
 
     def validate(self, data):
         # You can add custom validation logic here if needed
         return data 
+    
+class TransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = ['id', 'staff', 'timestamp', 'subtotal', 'discount', 'customer_name', 'customer_contact']
+
+
+class ScannedItemWithTransactionSerializer(serializers.ModelSerializer):
+    transaction = TransactionSerializer()
+    product = ProductSerializer() 
+    class Meta:
+        model = ScannedItem
+        fields = ['id', 'product', 'quantity', 'price_at_sale', 'transaction']

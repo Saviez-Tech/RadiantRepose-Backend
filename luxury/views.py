@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from .models import Transaction, ScannedItem, Product
-from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer
+from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer
 from .models import Worker
 from django.utils import timezone
 from django.db import transaction
@@ -69,9 +69,10 @@ class SalesView(APIView):
         today = timezone.now().date()
         try:
             worker = Worker.objects.get(user=request.user)
-            # Order transactions by timestamp in descending order
-            transactions = Transaction.objects.filter(staff=worker, timestamp__date=today).order_by('-timestamp')
-            serializer = SaleSerializer(transactions, many=True)
+            # Get all scanned items for this worker's transactions today
+            transactions = Transaction.objects.filter(staff=worker, timestamp__date=today)
+            scanned_items = ScannedItem.objects.filter(transaction__in=transactions).select_related('transaction', 'product')
+            serializer = ScannedItemWithTransactionSerializer(scanned_items, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Worker.DoesNotExist:
             return Response({"detail": "User is not a worker."}, status=status.HTTP_403_FORBIDDEN)
