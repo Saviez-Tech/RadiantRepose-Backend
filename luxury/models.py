@@ -1,6 +1,13 @@
 from django.db import models
 from django.contrib.auth.models import User
+import supabase
+from decouple import config
+from supabase import create_client
+from django.conf import settings
+import os
 
+
+supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 # Create your models here.
 class LuxuryBranch(models.Model):
     name = models.CharField(max_length=100)  # Name of the branch
@@ -23,15 +30,35 @@ class Worker(models.Model):
     
     
 class Product(models.Model):
-    name = models.CharField(max_length=255)  # Name of the product
-    image=models.ImageField(upload_to="Luxury-Images", blank=True, null=True)
-    category=models.CharField(max_length=20, blank=True, null=True)
-    description = models.TextField(blank=True)  # Description of the product
-    price = models.DecimalField(max_digits=10, decimal_places=2)  # Price of the product
-    stock_quantity = models.PositiveIntegerField(default=0)  # Quantity in stock
-    barcode = models.CharField(max_length=100, unique=True)  # Unique barcode number
-    branch = models.ForeignKey(LuxuryBranch, on_delete=models.CASCADE)  # Link to the branch
+    name = models.CharField(max_length=255)
+    image = models.ImageField(upload_to='temp/', blank=True, null=True)  # Temporary storage
+    image_url = models.URLField(blank=True, null=True)
+    category = models.CharField(max_length=20, blank=True, null=True)
+    description = models.TextField(blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    stock_quantity = models.PositiveIntegerField(default=0)
+    barcode = models.CharField(max_length=100, unique=True)
+    branch = models.ForeignKey(LuxuryBranch, on_delete=models.CASCADE)
 
+    def upload_image_to_supabase(self):
+        try:
+            if self.image:
+
+                supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+
+                file_path = self.image.path
+                file_name = f"products/{self.id}/{os.path.basename(file_path)}"
+
+                with open(file_path, "rb") as f:
+                    res = supabase.storage.from_("media").upload(file_name, f)
+
+                
+                self.image_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/media/{file_name}"
+                self.save()
+        except:
+            pass
+
+            
     def __str__(self):
         return self.name
     

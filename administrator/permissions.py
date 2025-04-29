@@ -6,4 +6,4 @@ class IsAdminUser(BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.groups.filter(name='administrator').exists() 
+        return request.user.is_authenticated and request.user.groups.filter(name='Administrator').exists() 

@@ -14,6 +14,7 @@ from pathlib import Path
 import os 
 from decouple import config
 import dj_database_url
+from supabase import create_client
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,6 +32,12 @@ DEBUG =  True
 ALLOWED_HOSTS = ["https://radiantrepose-backend.onrender.com","radiantrepose-backend.onrender.com","*"]
 
 
+
+#supabase
+SUPABASE_URL = config('SUPABASE_URL')
+SUPABASE_KEY = config('SUPABASE_KEY')
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Application definition
 
 INSTALLED_APPS = [

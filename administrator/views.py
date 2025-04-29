@@ -11,11 +11,19 @@ from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
+from django.conf import settings
+from supabase import create_client
+from rest_framework.authentication import TokenAuthentication
+import urllib.parse
+
+supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+
 # Create your views here.
 
 class ProductView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]  # Ensure the user is authenticated and is an admin
-
+    authentication_classes = [TokenAuthentication]
+    
     def get(self, request, product_id=None, branch_id=None):
         if product_id:
             try:
@@ -33,13 +41,16 @@ class ProductView(APIView):
             serializer = ProductSerializer(products, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def post(self, request):
+    def post(self, request, *args, **kwargs):
         serializer = ProductSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        if serializer.is_valid():
+            product = serializer.save()
+
+            return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
     def put(self, request, product_id):
         try:
             product = Product.objects.get(id=product_id)
@@ -65,8 +76,22 @@ class ProductView(APIView):
     def delete(self, request, product_id):
         try:
             product = Product.objects.get(id=product_id)
+
+            # Delete image from Supabase Storage if image_url exists
+            if product.image_url:
+
+                supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+
+                # Extract path from image_url
+                # e.g. https://xyz.supabase.co/storage/v1/object/public/media/products/1/img.jpg
+                public_url_prefix = f"{settings.SUPABASE_URL}/storage/v1/object/public/media/"
+                if product.image_url.startswith(public_url_prefix):
+                    file_path = urllib.parse.unquote(product.image_url.replace(public_url_prefix, ""))
+                    supabase.storage.from_("media").remove([file_path])
+
             product.delete()
             return Response({"detail": "Product deleted."}, status=status.HTTP_204_NO_CONTENT)
+
         except Product.DoesNotExist:
             return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
 
