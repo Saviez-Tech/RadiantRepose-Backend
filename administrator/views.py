@@ -8,7 +8,7 @@ from luxury.serializers import ProductSerializer, LuxuryBranchSerializer,Scanned
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsAdminUser  # Import the custom permission
 from django.utils import timezone
-from datetime import timedelta
+from datetime import datetime, timedelta
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.conf import settings
@@ -17,6 +17,9 @@ from rest_framework.authentication import TokenAuthentication
 import urllib.parse
 from rest_framework.exceptions import ValidationError
 from .serializers import ScannedItemWithTransactionSerializer
+
+from django.db.models import Sum, F
+import calendar
 
 supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
@@ -313,3 +316,41 @@ class WorkerListAPIView(APIView):
             serialized["usernamae"] = worker.user.username
             data.append(serialized)
         return Response(data, status=status.HTTP_200_OK)
+
+
+class WeeklySalesGraphView(APIView):
+    def get(self, request):
+        # Get optional week_start date from query params (format: YYYY-MM-DD)
+        week_start_str = request.query_params.get('week_start')
+
+        if week_start_str:
+            try:
+                week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+            except ValueError:
+                return Response({"error": "Invalid date format. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            # Default to current week (start from Monday)
+            today = datetime.today().date()
+            week_start = today - timedelta(days=today.weekday())
+
+        week_end = week_start + timedelta(days=6)
+
+        # Query transactions in the week and annotate actual amount made (subtotal - discount)
+        transactions = Transaction.objects.filter(timestamp__date__range=(week_start, week_end))\
+            .annotate(amount_made=F('subtotal') - F('discount'))
+
+        # Group by day
+        daily_data = {}
+        for i in range(7):
+            day = week_start + timedelta(days=i)
+            daily_data[day.strftime('%A')] = 0  # e.g., 'Monday': 0
+
+        for t in transactions:
+            day_name = t.timestamp.strftime('%A')
+            daily_data[day_name] += float(t.amount_made)
+
+        return Response({
+            "week_start": str(week_start),
+            "week_end": str(week_end),
+            "data": daily_data
+        })

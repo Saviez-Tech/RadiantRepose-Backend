@@ -21,6 +21,8 @@ urlpatterns = [
     path('worker-disable/<int:pk>/', WorkerDisableAPIView.as_view(), name='worker-disable'),
     path('worker-enable/<int:pk>/', WorkerEnableAPIView.as_view(), name='worker-disable'),
     path('worker-list/',WorkerListAPIView.as_view(),name="worker-list"),
+    
+    path('weekly-sales/', WeeklySalesGraphView.as_view(), name='weekly-sales'),
 ] 
 
 
