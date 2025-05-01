@@ -310,5 +310,6 @@ class WorkerListAPIView(APIView):
         for worker in workers:
             serialized = WorkerSerializerr(worker).data
             serialized["status"] = "Active" if worker.user.is_active else "Inactive"
+            serialized["usernamae"] = worker.user.username
             data.append(serialized)
         return Response(data, status=status.HTTP_200_OK)
