@@ -27,6 +27,7 @@ class LoginView(APIView):
             response_data = {
                 'id': user.id,
                 'username': user.username,
+                'full_name': f"{user.first_name or ''} {user.last_name or ''}".strip(),
                 'group': user.groups.first().name if user.groups.exists() else None,
                 'auth_token': token.key,
             }
