@@ -42,16 +42,34 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         fields = ['username', 'password', 'userfullname', 'phone_number', 'address', 'branch_id']  # Include 'name' instead of first and last name
 
-    def create(self, validated_data):
+    def create(self, validated_data):    
+        fullname = validated_data.get('userfullname', '').strip()
+        names = fullname.split()
+        
         # Extract worker details
         phone_number = validated_data.pop('phone_number')
         address = validated_data.pop('address')
         branch_id = validated_data.pop('branch_id')
         userfullname = validated_data.pop('userfullname')  # Get the full name
+        
+        
+        
 
-        # Create the user
+        # Basic logic: first word is first name, rest is last name
+        first_name = names[0] if names else ''
+        last_name = ' '.join(names[1:]) if len(names) > 1 else ''
+
         user = User(**validated_data)
-        user.set_password(validated_data['password'])  # Hash the password
+        user.set_password(validated_data['password'])
+        user.first_name = first_name
+        user.last_name = last_name
+        user.save()
+
+        # Assign to "worker" group
+        from django.contrib.auth.models import Group
+        worker_group, _ = Group.objects.get_or_create(name='worker')
+        user.groups.add(worker_group)
+        
         user.save()
 
         # Create the worker associated with the user
