@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from luxury.models import Product, LuxuryBranch, Transaction, ScannedItem,Worker
-from luxury.serializers import WorkerSerializer
+from luxury.serializers import WorkerSerializer, ProductSerializer
 
 
 class TransactionNestedSerializer(serializers.ModelSerializer):
@@ -14,7 +14,7 @@ class TransactionNestedSerializer(serializers.ModelSerializer):
 
 class ScannedItemWithTransactionSerializer(serializers.ModelSerializer):
     transaction = TransactionNestedSerializer()
-
+    product =ProductSerializer()
     class Meta:
         model = ScannedItem
         fields = ['id', 'product', 'quantity', 'price_at_sale', 'transaction']
