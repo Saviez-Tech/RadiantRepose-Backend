@@ -159,44 +159,49 @@ class LuxuryBranchView(APIView):
 
 
 class TotalGoodsSoldView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = []
 
     def get(self, request):
-        # Get the filter parameter (day, week, month)
         filter_type = request.query_params.get('filter', 'day')
         today = timezone.now().date()
 
-        if filter_type == 'day':
-            start_date = today
-            end_date = today + timedelta(days=1)
-        elif filter_type == 'week':
-            start_date = today - timedelta(days=today.weekday())
-            end_date = start_date + timedelta(days=7)
-        elif filter_type == 'month':
-            start_date = today.replace(day=1)
-            end_date = (start_date + timedelta(days=31)).replace(day=1)
-        else:
-            return Response({"detail": "Invalid filter type."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            # Try parsing filter as a specific date
+            specific_date = datetime.strptime(filter_type, "%Y-%m-%d").date()
+            start_date = specific_date
+            end_date = specific_date + timedelta(days=1)
+        except ValueError:
+            # If not a date, treat it as day/week/month
+            if filter_type == 'day':
+                start_date = today
+                end_date = today + timedelta(days=1)
+            elif filter_type == 'week':
+                start_date = today - timedelta(days=today.weekday())
+                end_date = start_date + timedelta(days=7)
+            elif filter_type == 'month':
+                start_date = today.replace(day=1)
+                end_date = (start_date + timedelta(days=31)).replace(day=1)
+            elif filter_type == 'year':
+                start_date = today.replace(day=1)
+                end_date = (start_date + timedelta(days=365)).replace(day=1)
+            else:
+                return Response({"detail": "Invalid filter type or date format."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Calculate total goods sold
         total_sold_quantity = ScannedItem.objects.filter(
             transaction__timestamp__range=(start_date, end_date)
         ).aggregate(total_quantity=Sum('quantity'))['total_quantity'] or 0
 
-        # Calculate total price of sold items
         total_sold_price = Transaction.objects.filter(
             timestamp__range=(start_date, end_date)
         ).aggregate(total_price=Sum('subtotal'))['total_price'] or 0
-        
-        low_stock_count = Product.objects.filter(stock_quantity__in=[0, 1, 2]).count()
 
+        low_stock_count = Product.objects.filter(stock_quantity__in=[0]).count()
 
         return Response({
             "total_goods_sold": total_sold_quantity,
             "total_price": total_sold_price,
-            "low_stock":low_stock_count
+            "low_stock": low_stock_count
         }, status=status.HTTP_200_OK)
-    
 class FilterScannedItemsByCategoryView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ScannedItemSerializer
@@ -214,16 +219,30 @@ class ListAllSalesView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = ScannedItem.objects.select_related('transaction').order_by('-transaction__id')
-        date_str = self.request.query_params.get('date', None)
+        filter_param = self.request.query_params.get('filter', None)
+        today = timezone.now().date()
 
-        if date_str:
+        if filter_param:
             try:
-                selected_date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
+                # Check if it's a specific date
+                selected_date = datetime.strptime(filter_param, '%Y-%m-%d').date()
                 queryset = queryset.filter(transaction__timestamp__date=selected_date)
             except ValueError:
-                return ScannedItem.objects.none()  # Invalid date format
+                if filter_param == 'week':
+                    start_date = today - timedelta(days=today.weekday())
+                    end_date = start_date + timedelta(days=7)
+                    queryset = queryset.filter(transaction__timestamp__date__range=(start_date, end_date))
+                elif filter_param == 'month':
+                    start_date = today.replace(day=1)
+                    end_date = (start_date + timedelta(days=31)).replace(day=1)
+                    queryset = queryset.filter(transaction__timestamp__date__range=(start_date, end_date))
+                elif filter_param == 'year':
+                    queryset = queryset.filter(transaction__timestamp__year=today.year)
+                else:
+                    return ScannedItem.objects.none()  # Invalid filter
 
         return queryset
+
     
 class FilterProductsByQuantityView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
@@ -235,23 +254,37 @@ class FilterProductsByQuantityView(generics.ListAPIView):
     
     
 class CategorySalesReportView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = []
 
     def get(self, request):
         filter_type = request.query_params.get('filter', 'day')
+        date_str = request.query_params.get('filter')
         today = timezone.now().date()
 
-        if filter_type == 'day':
-            start_date = today
-            end_date = today + timedelta(days=1)
-        elif filter_type == 'week':
-            start_date = today - timedelta(days=today.weekday())
-            end_date = start_date + timedelta(days=7)
-        elif filter_type == 'month':
-            start_date = today.replace(day=1)
-            end_date = (start_date + timedelta(days=31)).replace(day=1)
+        # 🔹 Use specific date if provided
+        if date_str:
+            try:
+                specific_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                start_date = specific_date
+                end_date = specific_date + timedelta(days=1)
+            except ValueError:
+                return Response({"detail": "Invalid date format. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
         else:
-            return Response({"detail": "Invalid filter type."}, status=status.HTTP_400_BAD_REQUEST)
+            # Fallback to filter
+            if filter_type == 'day':
+                start_date = today
+                end_date = today + timedelta(days=1)
+            elif filter_type == 'week':
+                start_date = today - timedelta(days=today.weekday())
+                end_date = start_date + timedelta(days=7)
+            elif filter_type == 'month':
+                start_date = today.replace(day=1)
+                end_date = (start_date + timedelta(days=31)).replace(day=1)
+            elif filter_type == 'year':
+                start_date = today.replace(day=1)
+                end_date = (start_date + timedelta(days=365)).replace(day=1)
+            else:
+                return Response({"detail": "Invalid filter type."}, status=status.HTTP_400_BAD_REQUEST)
 
         scanned_items = ScannedItem.objects.filter(
             transaction__timestamp__range=(start_date, end_date)
@@ -260,9 +293,7 @@ class CategorySalesReportView(generics.GenericAPIView):
         category_data = {}
 
         for item in scanned_items:
-            # Normalize category: lowercase and remove surrounding spaces
             category_name = (item.product.category or 'Uncategorized').strip().lower()
-
             item_total_price = item.quantity * item.price_at_sale
 
             if category_name not in category_data:
