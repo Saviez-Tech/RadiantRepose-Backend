@@ -163,7 +163,7 @@ class TotalGoodsSoldView(generics.GenericAPIView):
 
     def get(self, request):
         filter_type = request.query_params.get('filter', 'day')
-        date_str = request.query_params.get('date', None)
+        date_str = request.query_params.get('filter', None)
         today = timezone.now().date()
 
         if date_str:
@@ -223,7 +223,7 @@ class ListAllSalesView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = ScannedItem.objects.select_related('transaction').order_by('-transaction__id')
-        filter_param = self.request.query_params.get('filter', None)
+        filter_param = self.request.query_params.get('date', None)
         date_str = self.request.query_params.get('date', None)
         today = timezone.now().date()
 
@@ -262,7 +262,7 @@ class CategorySalesReportView(generics.GenericAPIView):
 
     def get(self, request):
         filter_type = request.query_params.get('filter', 'day')
-        date_str = request.query_params.get('date')
+        date_str = request.query_params.get('filter')
         today = timezone.now().date()
 
         # 🔹 Use specific date if provided
