@@ -222,7 +222,7 @@ class ListAllSalesView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = ScannedItem.objects.select_related('transaction').order_by('-transaction__id')
-        filter_value = self.request.query_params.get('filter', 'day')
+        filter_value = self.request.query_params.get('date', 'day')
         today = timezone.now().date()
 
         try:
