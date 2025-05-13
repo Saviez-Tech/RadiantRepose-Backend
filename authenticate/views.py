@@ -10,6 +10,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
+from luxury.models import Worker
 
 # Create your views here.
 
@@ -22,14 +23,17 @@ class LoginView(APIView):
         try:
             serializer.is_valid(raise_exception=True)
             user = serializer.validated_data
+            worker=Worker.objects.filter(user=user)
 
             token, _ = Token.objects.get_or_create(user=user)
+            worker=Worker.objects.get(user=user)
             response_data = {
                 'id': user.id,
                 'username': user.username,
                 'full_name': f"{user.first_name or ''} {user.last_name or ''}".strip(),
                 'group': user.groups.first().name if user.groups.exists() else None,
                 'auth_token': token.key,
+                'branch':worker.branch.name
             }
             return Response(response_data, status=status.HTTP_200_OK)
 
@@ -47,8 +51,8 @@ class LoginView(APIView):
             else:
                 return Response({'message': error_message}, status=status.HTTP_400_BAD_REQUEST)
 
-        except Exception:
-            return Response({'message': 'An unexpected error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # except Exception:
+        #     return Response({'message': 'An unexpected error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
 class RegisterView(APIView):
