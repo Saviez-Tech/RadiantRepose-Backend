@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "authenticate",
     'luxury',
     "administrator",
+    'ecommerce',
     "rest_framework",
     'rest_framework.authtoken',
 ]
