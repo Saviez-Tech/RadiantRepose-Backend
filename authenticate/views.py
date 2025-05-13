@@ -26,15 +26,20 @@ class LoginView(APIView):
             worker=Worker.objects.filter(user=user)
 
             token, _ = Token.objects.get_or_create(user=user)
-            worker=Worker.objects.get(user=user)
+          
             response_data = {
                 'id': user.id,
                 'username': user.username,
                 'full_name': f"{user.first_name or ''} {user.last_name or ''}".strip(),
                 'group': user.groups.first().name if user.groups.exists() else None,
                 'auth_token': token.key,
-                'branch':worker.branch.name
+                
             }
+            try:
+                worker = Worker.objects.get(user=user)
+                response_data['branch'] = worker.branch.name
+            except Worker.DoesNotExist:
+                pass
             return Response(response_data, status=status.HTTP_200_OK)
 
         except ValidationError as e:
