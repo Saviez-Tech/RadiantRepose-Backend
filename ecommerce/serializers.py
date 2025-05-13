@@ -8,7 +8,7 @@ class NewOrderSerializer(serializers.ModelSerializer):
     product= ProductSerializer()
     class Meta:
         model = Order
-        fields = ['product', 'quantity', 'price_at_sale']
+        fields = ['id','product', 'quantity', 'price_at_sale']
 
 class OrderSerializer(serializers.ModelSerializer):
     class Meta:
@@ -45,7 +45,7 @@ class BuyersInfoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BuyersInfo
-        fields = ['full_name', 'email', 'phone', 'street_address', 'zip_code', 'city', 'state', 'country', 'order']
+        fields = ['id','full_name', 'email', 'phone', 'street_address', 'zip_code', 'city', 'state', 'country', 'order']
 
     
     def create(self, validated_data):
