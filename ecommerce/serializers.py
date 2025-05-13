@@ -4,11 +4,7 @@ from .models import BuyersInfo, Order
 from django.db import transaction
 from luxury.serializers import ProductSerializer
 
-class NewOrderSerializer(serializers.ModelSerializer):
-    product= ProductSerializer()
-    class Meta:
-        model = Order
-        fields = ['id','product', 'quantity', 'price_at_sale']
+
 
 class OrderSerializer(serializers.ModelSerializer):
     class Meta:
@@ -67,3 +63,11 @@ class BuyersInfoSerializer(serializers.ModelSerializer):
                 )
 
         return buyer
+
+
+class NewOrderSerializer(serializers.ModelSerializer):
+    product= ProductSerializer()
+    customer=BuyersInfoSerializer(source='transaction')
+    class Meta:
+        model = Order
+        fields = ['id','customer','product', 'quantity', 'price_at_sale']
