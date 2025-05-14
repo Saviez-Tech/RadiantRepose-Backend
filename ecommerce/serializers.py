@@ -71,3 +71,16 @@ class NewOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = ['id','customer','product', 'quantity', 'price_at_sale']
+
+
+class ProductSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ['id','product', 'quantity', 'price_at_sale']
+    
+    product = ProductSerializer()
+
+class CustomerOrdersSerializer(serializers.Serializer):
+    customer = BuyersInfoSerializer()
+    products = ProductSummarySerializer(many=True)
+

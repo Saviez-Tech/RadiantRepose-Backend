@@ -6,7 +6,7 @@ from rest_framework import status
 from .serializers import BuyersInfoSerializer
 from rest_framework import generics,permissions
 from .models import BuyersInfo,Order
-from .serializers import OrderSerializer,NewOrderSerializer
+from .serializers import OrderSerializer,NewOrderSerializer,ProductSummarySerializer,CustomerOrdersSerializer
 from rest_framework.views import APIView
 
 
@@ -43,12 +43,26 @@ class BuyersWithPendingOrdersList(generics.ListAPIView):
         ).distinct()
     
 
-class BuyerOrdersDetail(generics.ListAPIView):
-    serializer_class = NewOrderSerializer
+class BuyerOrdersDetail(generics.GenericAPIView):
+    serializer_class = CustomerOrdersSerializer
 
-    def get_queryset(self):
+    def get(self, request, *args, **kwargs):
         buyer_id = self.kwargs['pk']
-        return Order.objects.filter(transaction_id=buyer_id)
+        orders = Order.objects.filter(transaction_id=buyer_id)
+
+        if not orders.exists():
+            return Response({"detail": "No orders found."}, status=404)
+
+        # Extract the customer info from one of the orders (they all have same customer)
+        customer_data = BuyersInfoSerializer(orders.first().transaction).data
+        products_data = ProductSummarySerializer(orders, many=True).data
+
+        data = {
+            "customer": customer_data,
+            "products": products_data
+        }
+        return Response(data)
+
     
 
 
