@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from luxury.models import Product, LuxuryBranch,ScannedItem,Transaction,Worker
 from luxury.serializers import ProductSerializer, LuxuryBranchSerializer,ScannedItemSerializer,SaleSerializer,WorkerSerializer,WorkerSerializerr
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import IsAdminUser  # Import the custom permission
 from django.utils import timezone
 from datetime import datetime, timedelta
@@ -28,6 +28,13 @@ supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 class ProductView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]  # Ensure the user is authenticated and is an admin
     authentication_classes = [TokenAuthentication]
+
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            # For GET request, allow any user (public access)
+            return [AllowAny()]
+        # For other methods (e.g., POST, PUT, DELETE), enforce the default permissions
+        return super().get_permissions()
     
     def get(self, request, product_id=None, branch_id=None):
         if product_id:
