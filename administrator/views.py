@@ -111,6 +111,13 @@ class ProductView(APIView):
 class LuxuryBranchView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]  # Ensure the user is authenticated and is an admin
 
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            # For GET request, allow any user (public access)
+            return [AllowAny()]
+        # For other methods (e.g., POST, PUT, DELETE), enforce the default permissions
+        return super().get_permissions()
+    
     def get(self, request, branch_id=None):
         if branch_id:
             try:
