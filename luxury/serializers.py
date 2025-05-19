@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Product, LuxuryBranch, Transaction, ScannedItem,Worker
+from .models import Product, LuxuryBranch, Transaction, ScannedItem,Worker,Booking, BookedService, Service
 
 
 class BranchSerializer(serializers.ModelSerializer):
@@ -108,3 +108,69 @@ class ScannedItemWithTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScannedItem
         fields = ['id', 'product', 'quantity', 'price_at_sale', 'transaction']
+
+
+
+##### SPA SECTION SERIALIZERS #####
+
+class ServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Service
+        fields = ['id', 'name', 'description', 'price', 'image']
+
+class BookedServiceSerializer(serializers.ModelSerializer):
+    service_id = serializers.IntegerField(write_only=True)
+
+    class Meta:
+        model = BookedService
+        fields = ['service_id', 'time']
+
+class BookingSerializer(serializers.ModelSerializer):
+    use_same_time_for_all = serializers.BooleanField(write_only=True)
+    time = serializers.DateTimeField(required=False, write_only=True)
+    services = serializers.ListField(child=serializers.JSONField(), write_only=True)
+
+    class Meta:
+        model = Booking
+        fields = ['customer_name', 'customer_phone', 'use_same_time_for_all', 'time', 'services']
+
+    def create(self, validated_data):
+        services_data = validated_data.pop('services')
+        use_same_time = validated_data.pop('use_same_time_for_all')
+        shared_time = validated_data.pop('time', None)
+
+        # Collect service IDs to validate
+        if use_same_time:
+            service_ids = services_data
+        else:
+            service_ids = [item['service_id'] for item in services_data]
+
+        # Validate all service IDs exist
+        existing_ids = set(Service.objects.filter(id__in=service_ids).values_list('id', flat=True))
+        invalid_ids = [sid for sid in service_ids if sid not in existing_ids]
+        if invalid_ids:
+            raise serializers.ValidationError({"services": f"Invalid service IDs: {invalid_ids}"})
+
+        # All services are valid, proceed
+        booking = Booking.objects.create(**validated_data)
+
+        if use_same_time:
+            for service_id in services_data:
+                service = Service.objects.get(id=service_id)
+                BookedService.objects.create(
+                    booking=booking,
+                    service=service,
+                    time=shared_time
+                )
+        else:
+            for item in services_data:
+                service = Service.objects.get(id=item['service_id'])
+                BookedService.objects.create(
+                    booking=booking,
+                    service=service,
+                    time=item['time']
+                )
+
+        return booking
+
+

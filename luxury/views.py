@@ -2,14 +2,17 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from .models import Transaction, ScannedItem, Product
-from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer
+from .models import Transaction, ScannedItem, Product,Service
+from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer,BookingSerializer,ServiceSerializer
 from .models import Worker
 from django.utils import timezone
 from django.db import transaction
 from rest_framework import generics
 from django.http import Http404
 from django.db.models import Q
+
+from rest_framework.generics import ListAPIView
+
 
 class SalesView(APIView):
     permission_classes = [IsAuthenticated]
@@ -112,3 +115,23 @@ class ProductSearchView(generics.ListAPIView):
             )
 
         return queryset
+    
+
+
+##### SPA APIS THIS SECTION CONTAINS APIS FOR SPA
+
+
+class CreateBookingView(APIView):
+    permission_classes = []
+    def post(self, request):
+        serializer = BookingSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ServiceListView(ListAPIView):
+    permission_classes = []
+    queryset = Service.objects.all()
+    serializer_class = ServiceSerializer

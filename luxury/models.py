@@ -84,3 +84,36 @@ class ScannedItem(models.Model):
 
     def __str__(self):
         return f"{self.product.name}"
+
+
+
+# Spa modesl
+
+# this section is for all the spa models
+
+class Service(models.Model):
+    name = models.CharField(max_length=100)
+    time_in_minutes = models.PositiveIntegerField()  # Duration of the service
+    image = models.URLField(null=True,blank=True)
+    description = models.TextField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    def __str__(self):
+        return self.name
+    
+
+class Booking(models.Model):
+    customer_name = models.CharField(max_length=100)
+    customer_phone = models.CharField(max_length=17)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Booking by {self.customer_name}"
+
+class BookedService(models.Model):
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='booked_services')
+    service = models.ForeignKey(Service, on_delete=models.CASCADE)
+    time = models.DateTimeField()  # Can be unique or same for all; frontend decides
+
+    def __str__(self):
+        return f"{self.service.name} for {self.booking.customer_name} @ {self.time}"
