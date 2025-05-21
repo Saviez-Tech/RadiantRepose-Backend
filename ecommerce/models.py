@@ -12,6 +12,7 @@ class BuyersInfo(models.Model):
     city=models.CharField(max_length=50)
     state= models.CharField(max_length=50)
     country= models.CharField(max_length=50)
+    reference = models.CharField(max_length=100, blank=True, null=True, unique=True)
     
 
 
@@ -21,6 +22,9 @@ class Order(models.Model):
     quantity = models.PositiveIntegerField()  # Quantity of the item
     price_at_sale = models.DecimalField(max_digits=10, decimal_places=2,default=0)
     status = models.CharField(max_length=10,default='pending')
+    payment=models.BooleanField(default=False)
+    
+
 
 
 
