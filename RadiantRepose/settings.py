@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG =  False
+DEBUG = True
 
 ALLOWED_HOSTS = ["https://radiantrepose-backend.onrender.com","radiantrepose-backend.onrender.com","*"]
 
@@ -36,6 +36,10 @@ ALLOWED_HOSTS = ["https://radiantrepose-backend.onrender.com","radiantrepose-bac
 #supabase
 SUPABASE_URL = config('SUPABASE_URL')
 SUPABASE_KEY = config('SUPABASE_KEY')
+
+#Paystack 
+PAYSTACK_SECRET_KEY = config('PAYSTACK_SECRET_KEY')  # replace with your actual secret key
+
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Application definition

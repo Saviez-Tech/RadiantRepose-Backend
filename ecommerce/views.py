@@ -9,6 +9,9 @@ from .models import BuyersInfo,Order
 from .serializers import OrderSerializer,NewOrderSerializer,ProductSummarySerializer,CustomerOrdersSerializer
 from rest_framework.views import APIView
 
+import requests
+from django.conf import settings
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -85,3 +88,58 @@ class FulfillBuyerOrdersAPIView(APIView):
         return Response({
             "message": f"All orders for '{buyer.full_name}' have been marked as fulfilled."
         }, status=status.HTTP_200_OK)
+    
+
+
+
+#PAYMENT 
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def initialize_payment(request):
+    email = request.data.get("email")
+    amount = int(request.data.get("amount")) * 100  # in kobo
+    headers = {
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+        "Content-Type": "application/json",
+    }
+    data = {
+        "email": email,
+        "amount": amount,
+    }
+    response = requests.post("https://api.paystack.co/transaction/initialize", json=data, headers=headers)
+    return Response(response.json())
+
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def verify_payment(request, reference):
+    headers = {
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+    }
+    url = f"https://api.paystack.co/transaction/verify/{reference}"
+    try:
+        response = requests.get(url, headers=headers)
+        result = response.json()
+
+        if result["status"] and result["data"]["status"] == "success":
+            data = result["data"]
+            return Response({
+                "status": "success",
+                "reference": data["reference"],
+                "amount": data["amount"] / 100,  # Convert from kobo to naira
+                "currency": data["currency"],
+                "email": data["customer"]["email"],
+                "transaction_date": data["transaction_date"],
+                "gateway_response": data["gateway_response"]
+            })
+
+        return Response({
+            "status": "failed",
+            "message": result["data"].get("gateway_response", "Payment not successful")
+        }, status=400)
+
+    except Exception as e:
+        return Response({"status": "error", "message": str(e)}, status=500)
