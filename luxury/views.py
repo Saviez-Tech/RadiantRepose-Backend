@@ -2,15 +2,15 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from .models import Transaction, ScannedItem, Product,Service
-from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer,BookingSerializer,ServiceSerializer
+from .models import Transaction, ScannedItem, Product,Service,Booking
+from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer,BookingSerializer,ServiceSerializer,ListBookingSerializer
 from .models import Worker
 from django.utils import timezone
 from django.db import transaction
 from rest_framework import generics
 from django.http import Http404
 from django.db.models import Q
-
+from django.shortcuts import get_object_or_404
 from rest_framework.generics import ListAPIView
 
 
@@ -129,6 +129,14 @@ class CreateBookingView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class BookingDetailView(APIView):
+    permission_classes = []
+
+    def get(self, request, id):
+        booking = get_object_or_404(Booking, id=id)
+        serializer = ListBookingSerializer(booking)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class ServiceListView(ListAPIView):

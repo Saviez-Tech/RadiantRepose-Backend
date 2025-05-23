@@ -92,6 +92,7 @@ class ScannedItem(models.Model):
 # this section is for all the spa models
 
 class Service(models.Model):
+    branch=models.ForeignKey(LuxuryBranch,null=True, blank=True,on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
     time_in_minutes = models.PositiveIntegerField()  # Duration of the service
     image = models.URLField(null=True,blank=True)

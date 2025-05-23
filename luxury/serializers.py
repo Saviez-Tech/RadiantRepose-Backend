@@ -132,7 +132,7 @@ class BookingSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Booking
-        fields = ['customer_name', 'customer_phone', 'use_same_time_for_all', 'time', 'services']
+        fields = ['id','customer_name', 'customer_phone', 'use_same_time_for_all', 'time', 'services']
 
     def create(self, validated_data):
         services_data = validated_data.pop('services')
@@ -174,3 +174,18 @@ class BookingSerializer(serializers.ModelSerializer):
         return booking
 
 
+
+
+class ListBookedServiceSerializer(serializers.ModelSerializer):
+    service = ServiceSerializer(read_only=True)
+
+    class Meta:
+        model = BookedService
+        fields = ['id', 'service', 'time']
+
+class ListBookingSerializer(serializers.ModelSerializer):
+    booked_services = ListBookedServiceSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Booking
+        fields = ['id', 'customer_name', 'customer_phone', 'created_at', 'booked_services']

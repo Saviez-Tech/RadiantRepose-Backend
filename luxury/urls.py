@@ -9,5 +9,6 @@ urlpatterns = [
 
     #SPA ENDPOINTS
     path("create-booking/",CreateBookingView.as_view(),name="create-booking"),
+    path('bookings/<int:id>/', BookingDetailView.as_view()),
     path('services/',ServiceListView.as_view(),name="services")
 ] 
