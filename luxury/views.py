@@ -13,7 +13,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework.generics import ListAPIView
 
-
+# All Codes For the Luxury Section
 class SalesView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -99,15 +99,24 @@ class TransactionDetailView(generics.RetrieveAPIView):
         
 
 class ProductSearchView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]  # We'll handle admin logic in the view
     serializer_class = ProductSerializer
 
     def get_queryset(self):
-        queryset = Product.objects.all()
         search_query = self.request.query_params.get('search', None)
 
+        # If user is admin, search all products
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            queryset = Product.objects.all()
+        else:
+            try:
+                worker = Worker.objects.get(user=self.request.user)
+                queryset = Product.objects.filter(branch=worker.branch)
+            except Worker.DoesNotExist:
+                # Return empty queryset if worker profile is not found
+                return Product.objects.none()
+
         if search_query:
-            # Use Q objects to filter by name, category, or barcode
             queryset = queryset.filter(
                 Q(name__icontains=search_query) |
                 Q(category__icontains=search_query) |
@@ -121,6 +130,7 @@ class ProductSearchView(generics.ListAPIView):
 ##### SPA APIS THIS SECTION CONTAINS APIS FOR SPA
 
 
+# Booking Endpoints
 class CreateBookingView(APIView):
     permission_classes = []
     def post(self, request):
@@ -143,3 +153,6 @@ class ServiceListView(ListAPIView):
     permission_classes = []
     queryset = Service.objects.all()
     serializer_class = ServiceSerializer
+
+
+# POS ENDPOINTS

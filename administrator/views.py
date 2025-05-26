@@ -40,16 +40,31 @@ class ProductView(APIView):
         if product_id:
             try:
                 product = Product.objects.get(id=product_id)
+                if request.user.is_authenticated:
+                    try:
+                        worker = Worker.objects.get(user=request.user)
+                        # Check if product belongs to user's branch
+                        if product.branch != worker.branch:
+                            return Response({"detail": "Access denied. Product not in your branch."}, status=status.HTTP_403_FORBIDDEN)
+                    except Worker.DoesNotExist:
+                        product = Product.objects.get(id=product_id)
+                # If not authenticated or authorized, return product details
                 serializer = ProductSerializer(product)
                 return Response(serializer.data, status=status.HTTP_200_OK)
             except Product.DoesNotExist:
                 return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
         else:
-            # If branch_id is provided, filter products by branch
-            if branch_id:
+            if request.user.is_authenticated:
+                try:
+                    worker = Worker.objects.get(user=request.user)
+                    products = Product.objects.filter(branch=worker.branch)
+                except Worker.DoesNotExist:
+                    products = Product.objects.all()
+            elif branch_id:
                 products = Product.objects.filter(branch_id=branch_id)
             else:
                 products = Product.objects.all()
+
             serializer = ProductSerializer(products, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
