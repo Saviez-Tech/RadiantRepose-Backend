@@ -18,4 +18,6 @@ urlpatterns = [
     path('search-booked-services/', BookedServiceSearchView.as_view(), name='search-booked-services'),
 
     path('spa/sales/', SPASalesView.as_view(), name='spa-sales'),
+    path('spa/products/', SpaProductDetailListView.as_view(), name='spa-product-list'),
+    path('spa/product/search/',SpaProductSearchView.as_view(),name="search-spa-product")
 ] 

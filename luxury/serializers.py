@@ -217,7 +217,7 @@ class SPAScannedItemInputSerializer(serializers.Serializer):
 class SpaProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = SpaProduct
-        fields = ['id', 'name', 'price', 'description', 'stock_quantity']  # include any other relevant fields
+        fields = "__all__" 
 
 class SPAScannedItemOutputSerializer(serializers.ModelSerializer):
     product = SpaProductSerializer(read_only=True)

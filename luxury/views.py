@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from .models import Transaction, ScannedItem, Product,Service,Booking,BookedService,SPAScannedItem,SPATransaction,SpaProduct
-from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer,BookingSerializer,ServiceSerializer,ListBookingSerializer,ListBookedServiceSerializer,SPAScannedItemInputSerializer,SPAScannedItemWithTransactionSerializer,SPATransactionSerializer
+from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer,BookingSerializer,ServiceSerializer,ListBookingSerializer,ListBookedServiceSerializer,SPAScannedItemInputSerializer,SPAScannedItemWithTransactionSerializer,SPATransactionSerializer,SpaProductSerializer
 from .models import Worker
 from django.utils import timezone
 from django.db import transaction
@@ -241,3 +241,74 @@ class SPASalesView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Worker.DoesNotExist:
             return Response({"detail": "User is not a worker."}, status=status.HTTP_403_FORBIDDEN)
+        
+
+
+class SpaProductDetailListView(APIView):
+    permission_classes = []
+
+    def get(self, request, product_id=None, branch_id=None):
+        if product_id:
+            try:
+                product = SpaProduct.objects.get(id=product_id)
+
+                if request.user.is_authenticated:
+                    try:
+                        worker = Worker.objects.get(user=request.user)
+                        if product.branch != worker.branch:
+                            return Response(
+                                {"detail": "Access denied. Product not in your branch."},
+                                status=status.HTTP_403_FORBIDDEN
+                            )
+                    except Worker.DoesNotExist:
+                        pass  # User is authenticated but not a worker; allow or deny as needed
+
+                serializer = SpaProductSerializer(product)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            except SpaProduct.DoesNotExist:
+                return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        else:
+            if request.user.is_authenticated:
+                try:
+                    worker = Worker.objects.get(user=request.user)
+                    products = SpaProduct.objects.filter(branch=worker.branch)
+                except Worker.DoesNotExist:
+                    products = SpaProduct.objects.all()
+            elif branch_id:
+                products = SpaProduct.objects.filter(branch_id=branch_id)
+            else:
+                products = SpaProduct.objects.all()
+
+            serializer = SpaProductSerializer(products, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+class SpaProductSearchView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]  # We'll handle admin logic in the view
+    serializer_class = SpaProductSerializer
+
+    def get_queryset(self):
+        search_query = self.request.query_params.get('search', None)
+
+        # If user is admin, search all products
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            queryset = SpaProduct.objects.all()
+        else:
+            try:
+                worker = Worker.objects.get(user=self.request.user)
+                queryset = SpaProduct.objects.filter(branch=worker.branch)
+            except Worker.DoesNotExist:
+                # Return empty queryset if worker profile is not found
+                return SpaProduct.objects.none()
+
+        if search_query:
+            queryset = queryset.filter(
+                Q(name__icontains=search_query) |
+                Q(category__icontains=search_query) |
+                Q(barcode__icontains=search_query)
+            )
+
+        return queryset
