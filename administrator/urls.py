@@ -23,6 +23,11 @@ urlpatterns = [
     path('worker-list/',WorkerListAPIView.as_view(),name="worker-list"),
     
     path('weekly-sales/', WeeklySalesGraphView.as_view(), name='weekly-sales'),
+
+
+
+    #SPA ENDPOINTS
+    path('spa/total-goods-sold/',TotalSpaProductsSoldView.as_view(),name="spa-dashboard")
 ] 
 
 

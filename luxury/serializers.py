@@ -234,7 +234,7 @@ class SPATransactionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SPATransaction
-        fields = ['staff', 'subtotal', 'discount', 'customer_name', 'customer_contact', 'scanned_items', 'scanned_items_detail']
+        fields = ['staff','code', 'subtotal', 'discount', 'customer_name', 'customer_contact', 'scanned_items', 'scanned_items_detail']
 
     def create(self, validated_data):
         scanned_items_data = validated_data.pop('scanned_items')

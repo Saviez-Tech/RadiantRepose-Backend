@@ -3,8 +3,8 @@ from rest_framework import generics
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from luxury.models import Product, LuxuryBranch,ScannedItem,Transaction,Worker
-from luxury.serializers import ProductSerializer, LuxuryBranchSerializer,ScannedItemSerializer,SaleSerializer,WorkerSerializer,WorkerSerializerr
+from luxury.models import Product, LuxuryBranch,ScannedItem,Transaction,Worker,SPAScannedItem,SPATransaction,SpaProduct
+from luxury.serializers import ProductSerializer, LuxuryBranchSerializer,ScannedItemSerializer,SaleSerializer,WorkerSerializer,WorkerSerializerr,ScannedItemWithTransactionSerializer,SpaProductSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import IsAdminUser  # Import the custom permission
 from django.utils import timezone
@@ -16,7 +16,7 @@ from supabase import create_client
 from rest_framework.authentication import TokenAuthentication
 import urllib.parse
 from rest_framework.exceptions import ValidationError
-from .serializers import ScannedItemWithTransactionSerializer
+from .serializers import ScannedItemWithTransactionSerializer,SpaScannedItemWithTransactionSerializer
 
 from django.db.models import Sum, F
 import calendar
@@ -414,3 +414,201 @@ class WeeklySalesGraphView(APIView):
             "week_end": str(week_end),
             "data": daily_data
         })
+    
+
+
+
+
+
+# SPA SECTIONS ADMIN FUNCTIONALITIES
+
+class TotalSpaProductsSoldView(generics.GenericAPIView):
+    permission_classes = []
+
+    def get(self, request):
+        filter_value = request.query_params.get('filter', 'day')
+        today = timezone.now().date()
+
+        try:
+            specific_date = datetime.strptime(filter_value, "%Y-%m-%d").date()
+            start_date = specific_date
+            end_date = specific_date + timedelta(days=1)
+        except ValueError:
+            if filter_value == 'day':
+                start_date = today
+                end_date = today + timedelta(days=1)
+            elif filter_value == 'week':
+                start_date = today - timedelta(days=today.weekday())
+                end_date = start_date + timedelta(days=7)
+            elif filter_value == 'month':
+                start_date = today.replace(day=1)
+                end_date = (start_date + timedelta(days=31)).replace(day=1)
+            elif filter_value == 'year':
+                start_date = today.replace(month=1, day=1)
+                end_date = start_date.replace(year=start_date.year + 1)
+            else:
+                return Response({
+                    "detail": "Invalid filter value. Use day, week, month, year, or a valid date (YYYY-MM-DD)."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        total_sold_quantity = SPAScannedItem.objects.filter(
+            product__isnull=False,
+            transaction__timestamp__range=(start_date, end_date)
+        ).aggregate(total_quantity=Sum('quantity'))['total_quantity'] or 0
+
+        total_sold_price = SPAScannedItem.objects.filter(
+            product__isnull=False,
+            transaction__timestamp__range=(start_date, end_date)
+        ).aggregate(total_price=Sum('price_at_sale'))['total_price'] or 0
+
+        low_stock_count = SpaProduct.objects.filter(stock_quantity__lte=0).count()
+
+        return Response({
+            "total_products_sold": total_sold_quantity,
+            "total_sales_amount": total_sold_price,
+            "low_stock_count": low_stock_count
+        }, status=status.HTTP_200_OK)
+    
+
+class SpaListAllSalesView(generics.ListAPIView):
+    permission_classes = []
+    serializer_class = SpaScannedItemWithTransactionSerializer
+
+    def get_queryset(self):
+        queryset = SPAScannedItem.objects.select_related('transaction').order_by('-transaction__id')
+        filter_value = self.request.query_params.get('date', 'day')
+        today = timezone.now().date()
+
+        try:
+            # Try parsing as a date
+            selected_date = datetime.strptime(filter_value, '%Y-%m-%d').date()
+            return queryset.filter(transaction__timestamp__date=selected_date)
+        except ValueError:
+            # Not a date, treat as keyword
+            if filter_value == 'day':
+                start_date = today
+                end_date = today + timedelta(days=1)
+            elif filter_value == 'week':
+                start_date = today - timedelta(days=today.weekday())
+                end_date = start_date + timedelta(days=7)
+            elif filter_value == 'month':
+                start_date = today.replace(day=1)
+                end_date = (start_date + timedelta(days=31)).replace(day=1)
+            elif filter_value == 'year':
+                start_date = today.replace(month=1, day=1)
+                end_date = start_date.replace(year=start_date.year + 1)
+            else:
+                return SPAScannedItem.objects.none()  # Invalid filter
+
+            return queryset.filter(transaction__timestamp__date__range=(start_date, end_date))
+        
+class SpaCategorySalesReportView(generics.GenericAPIView):
+    permission_classes = []
+
+    def get(self, request):
+        filter_value = request.query_params.get('filter', 'day')
+        today = timezone.now().date()
+
+        try:
+            specific_date = datetime.strptime(filter_value, "%Y-%m-%d").date()
+            start_date = specific_date
+            end_date = specific_date + timedelta(days=1)
+        except ValueError:
+            if filter_value == 'day':
+                start_date = today
+                end_date = today + timedelta(days=1)
+            elif filter_value == 'week':
+                start_date = today - timedelta(days=today.weekday())
+                end_date = start_date + timedelta(days=7)
+            elif filter_value == 'month':
+                start_date = today.replace(day=1)
+                end_date = (start_date + timedelta(days=31)).replace(day=1)
+            elif filter_value == 'year':
+                start_date = today.replace(month=1, day=1)
+                end_date = start_date.replace(year=start_date.year + 1)
+            else:
+                return Response({
+                    "detail": "Invalid filter type or date format. Use YYYY-MM-DD or one of: day, week, month, year."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        scanned_items = SPAScannedItem.objects.filter(
+            product__isnull=False,
+            transaction__timestamp__range=(start_date, end_date)
+        ).select_related('product')
+
+        category_data = {}
+
+        for item in scanned_items:
+            category_name = (item.product.category or 'Uncategorized').strip().lower()
+            item_total_price = item.quantity * item.price_at_sale
+
+            if category_name not in category_data:
+                category_data[category_name] = {
+                    "total_quantity_sold": 0,
+                    "total_amount_made": 0
+                }
+
+            category_data[category_name]["total_quantity_sold"] += item.quantity
+            category_data[category_name]["total_amount_made"] += float(item_total_price)
+
+        return Response(category_data, status=status.HTTP_200_OK)
+    
+
+class SpaProductView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]  # Ensure the user is authenticated and is an admin
+    authentication_classes = [TokenAuthentication]
+
+    def post(self, request, *args, **kwargs):
+        serializer = SpaProductSerializer(data=request.data)
+
+        if serializer.is_valid():
+            product = serializer.save()
+            return Response(SpaProductSerializer(product).data, status=status.HTTP_201_CREATED)
+
+        # Flatten and return the first error message in a clean format
+        first_error = next(iter(serializer.errors.values()))[0]
+        raise ValidationError({"detail": str(first_error)})
+    
+    def put(self, request, product_id):
+        try:
+            product = SpaProduct.objects.get(id=product_id)
+            serializer = SpaProductSerializer(product, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except SpaProduct.DoesNotExist:
+            return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    def patch(self, request, product_id):
+        try:
+            product = SpaProduct.objects.get(id=product_id)
+            serializer = SpaProductSerializer(product, data=request.data, partial=True)  # Set partial=True for partial updates
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except SpaProduct.DoesNotExist:
+            return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request, product_id):
+        try:
+            product = SpaProduct.objects.get(id=product_id)
+
+            # Delete image from Supabase Storage if image_url exists
+            if product.image_url:
+
+                supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+
+                # Extract path from image_url
+                # e.g. https://xyz.supabase.co/storage/v1/object/public/media/products/1/img.jpg
+                public_url_prefix = f"{settings.SUPABASE_URL}/storage/v1/object/public/media/"
+                if product.image_url.startswith(public_url_prefix):
+                    file_path = urllib.parse.unquote(product.image_url.replace(public_url_prefix, ""))
+                    supabase.storage.from_("media").remove([file_path])
+
+            product.delete()
+            return Response({"detail": "Product deleted."}, status=status.HTTP_204_NO_CONTENT)
+
+        except SpaProduct.DoesNotExist:
+            return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
