@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from luxury.models import Product, LuxuryBranch, Transaction, ScannedItem,Worker,Service
-from luxury.serializers import WorkerSerializer, ProductSerializer,SPATransaction,SPAScannedItem
+from luxury.serializers import WorkerSerializer, ProductSerializer,SPATransaction,SPAScannedItem,SpaProductSerializer
 
 
 class TransactionNestedSerializer(serializers.ModelSerializer):
@@ -35,7 +35,7 @@ class SpaServiceSerializer(serializers.ModelSerializer):
         
 class SpaScannedItemWithTransactionSerializer(serializers.ModelSerializer):
     transaction = TransactionNestedSerializer()
-    product =ProductSerializer()
+    product =SpaProductSerializer()
     service= SpaServiceSerializer()
     class Meta:
         model = SPAScannedItem

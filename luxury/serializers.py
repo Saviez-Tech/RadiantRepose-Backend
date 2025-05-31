@@ -240,7 +240,7 @@ class SpaProductSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         image_file = validated_data.pop('image', None)
-        product = Product.objects.create(**validated_data)
+        product = SpaProduct.objects.create(**validated_data)
 
         if image_file:
             product.image = image_file
