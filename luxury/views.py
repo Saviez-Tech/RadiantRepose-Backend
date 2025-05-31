@@ -2,8 +2,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from .models import Transaction, ScannedItem, Product,Service,Booking
-from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer,BookingSerializer,ServiceSerializer,ListBookingSerializer
+from .models import Transaction, ScannedItem, Product,Service,Booking,BookedService,SPAScannedItem,SPATransaction,SpaProduct
+from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer,BookingSerializer,ServiceSerializer,ListBookingSerializer,ListBookedServiceSerializer,SPAScannedItemInputSerializer,SPAScannedItemWithTransactionSerializer,SPATransactionSerializer
 from .models import Worker
 from django.utils import timezone
 from django.db import transaction
@@ -156,3 +156,97 @@ class ServiceListView(ListAPIView):
 
 
 # POS ENDPOINTS
+
+class BookedServiceSearchView(APIView):
+    def get(self, request):
+        code = request.query_params.get('code')
+        if not code:
+            return Response({"error": "Code query parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        booked_services = BookedService.objects.filter(code=code)
+        serializer = ListBookedServiceSerializer(booked_services, many=True)
+        return Response(serializer.data)
+
+
+class SPASalesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            worker = Worker.objects.get(user=request.user)
+            worker_branch = worker.branch
+        except Worker.DoesNotExist:
+            return Response({"detail": "User is not a worker."}, status=status.HTTP_403_FORBIDDEN)
+
+        request.data['staff'] = worker.id
+        scanned_items_data = request.data.get('scanned_items', [])
+
+        with transaction.atomic():
+            products_cache = {}
+
+            for item in scanned_items_data:
+                if 'product_id' in item:
+                    try:
+                        product = SpaProduct.objects.get(id=item['product_id'])
+                        if product.branch != worker_branch:
+                            return Response({
+                                "detail": f"Product '{product.name}' does not belong to your branch."
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                        products_cache[item['product_id']] = product
+
+                        if item['quantity'] > product.stock_quantity:
+                            return Response({
+                                "detail": f"Insufficient stock for {product.name}. Available: {product.stock_quantity}."
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                    except SpaProduct.DoesNotExist:
+                        return Response({"detail": f"Product ID {item['product_id']} not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+                elif 'service_id' in item:
+                    try:
+                        service = Service.objects.get(id=item['service_id'])
+                        if service.branch != worker_branch:
+                            return Response({
+                                "detail": f"Service '{service.name}' does not belong to your branch."
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                    except Service.DoesNotExist:
+                        return Response({"detail": f"Service ID {item['service_id']} not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = SPATransactionSerializer(data=request.data)
+            if serializer.is_valid():
+                transaction_instance = serializer.save()
+
+                for item in scanned_items_data:
+                    if 'product_id' in item:
+                        product = products_cache[item['product_id']]
+                        SPAScannedItem.objects.create(
+                            transaction=transaction_instance,
+                            product=product,
+                            quantity=item['quantity'],
+                            price_at_sale=product.price
+                        )
+                        product.stock_quantity -= item['quantity']
+                        product.save()
+
+                    elif 'service_id' in item:
+                        service = Service.objects.get(id=item['service_id'])
+                        SPAScannedItem.objects.create(
+                            transaction=transaction_instance,
+                            service=service,
+                            quantity=item['quantity'],
+                            price_at_sale=service.price
+                        )
+
+                return Response({"transaction_code": transaction_instance.code}, status=status.HTTP_201_CREATED)
+
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def get(self, request):
+        today = timezone.now().date()
+        try:
+            worker = Worker.objects.get(user=request.user)
+            transactions = SPATransaction.objects.filter(staff=worker, timestamp__date=today)
+            scanned_items = SPAScannedItem.objects.filter(transaction__in=transactions).select_related('transaction', 'product', 'service')
+            serializer = SPAScannedItemWithTransactionSerializer(scanned_items, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Worker.DoesNotExist:
+            return Response({"detail": "User is not a worker."}, status=status.HTTP_403_FORBIDDEN)

@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Product, LuxuryBranch, Transaction, ScannedItem,Worker,Booking, BookedService, Service
+from .models import Product, LuxuryBranch, Transaction, ScannedItem,Worker,Booking, BookedService, Service,SPATransaction,SPAScannedItem
+from django.utils.dateparse import parse_datetime
 
 
 class BranchSerializer(serializers.ModelSerializer):
@@ -118,12 +119,7 @@ class ServiceSerializer(serializers.ModelSerializer):
         model = Service
         fields = ['id', 'name', 'description', 'price', 'image']
 
-class BookedServiceSerializer(serializers.ModelSerializer):
-    service_id = serializers.IntegerField(write_only=True)
 
-    class Meta:
-        model = BookedService
-        fields = ['service_id', 'time']
 
 class BookingSerializer(serializers.ModelSerializer):
     use_same_time_for_all = serializers.BooleanField(write_only=True)
@@ -132,7 +128,7 @@ class BookingSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Booking
-        fields = ['id','customer_name', 'customer_phone', 'use_same_time_for_all', 'time', 'services']
+        fields = ['id', 'customer_name', 'customer_phone', 'use_same_time_for_all', 'time', 'services']
 
     def create(self, validated_data):
         services_data = validated_data.pop('services')
@@ -151,7 +147,7 @@ class BookingSerializer(serializers.ModelSerializer):
         if invalid_ids:
             raise serializers.ValidationError({"services": f"Invalid service IDs: {invalid_ids}"})
 
-        # All services are valid, proceed
+        # Create booking instance
         booking = Booking.objects.create(**validated_data)
 
         if use_same_time:
@@ -165,13 +161,21 @@ class BookingSerializer(serializers.ModelSerializer):
         else:
             for item in services_data:
                 service = Service.objects.get(id=item['service_id'])
+                
+                # Parse time string to datetime object
+                time_str = item['time']
+                time = parse_datetime(time_str)
+                if time is None:
+                    raise serializers.ValidationError({"time": f"Invalid datetime format: {time_str}"})
+
                 BookedService.objects.create(
                     booking=booking,
                     service=service,
-                    time=item['time']
+                    time=time
                 )
 
         return booking
+
 
 
 
@@ -181,7 +185,7 @@ class ListBookedServiceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BookedService
-        fields = ['id', 'service', 'time']
+        fields = ['id', 'service', 'time','code']
 
 class ListBookingSerializer(serializers.ModelSerializer):
     booked_services = ListBookedServiceSerializer(many=True, read_only=True)
@@ -189,3 +193,52 @@ class ListBookingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
         fields = ['id', 'customer_name', 'customer_phone', 'created_at', 'booked_services']
+
+
+
+
+#SPA POS SERIALIZERS
+
+from rest_framework import serializers
+
+class SPAScannedItemInputSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField(required=False)
+    service_id = serializers.IntegerField(required=False)
+    quantity = serializers.IntegerField()
+    price_at_sale = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+    def validate(self, data):
+        if not data.get('product_id') and not data.get('service_id'):
+            raise serializers.ValidationError("Either product_id or service_id must be provided.")
+        if data.get('product_id') and data.get('service_id'):
+            raise serializers.ValidationError("Only one of product_id or service_id must be provided, not both.")
+        return data
+
+
+class SPATransactionSerializer(serializers.ModelSerializer):
+    scanned_items = SPAScannedItemInputSerializer(many=True)
+
+    class Meta:
+        model = SPATransaction
+        fields = ['staff', 'subtotal', 'discount', 'customer_name', 'customer_contact', 'scanned_items']
+
+
+class SPAScannedItemWithTransactionSerializer(serializers.ModelSerializer):
+    transaction_code = serializers.CharField(source='transaction.code', read_only=True)
+    transaction_time = serializers.DateTimeField(source='transaction.timestamp', read_only=True)
+    staff = serializers.CharField(source='transaction.staff.user.username', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True, default=None)
+    service_name = serializers.CharField(source='service.name', read_only=True, default=None)
+
+    class Meta:
+        model = SPAScannedItem
+        fields = [
+            'id',
+            'transaction_code',
+            'transaction_time',
+            'staff',
+            'product_name',
+            'service_name',
+            'quantity',
+            'price_at_sale'
+        ]
