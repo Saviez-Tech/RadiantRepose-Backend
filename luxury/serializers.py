@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Product, LuxuryBranch, Transaction, ScannedItem,Worker,Booking, BookedService, Service,SPATransaction,SPAScannedItem
+from .models import Product, LuxuryBranch, Transaction, ScannedItem,Worker,Booking, BookedService, Service,SPATransaction,SPAScannedItem,SpaProduct
 from django.utils.dateparse import parse_datetime
 
 
@@ -205,7 +205,7 @@ class SPAScannedItemInputSerializer(serializers.Serializer):
     product_id = serializers.IntegerField(required=False)
     service_id = serializers.IntegerField(required=False)
     quantity = serializers.IntegerField()
-    price_at_sale = serializers.DecimalField(max_digits=10, decimal_places=2)
+    price_at_sale = serializers.DecimalField(max_digits=10, decimal_places=2, required=False) 
 
     def validate(self, data):
         if not data.get('product_id') and not data.get('service_id'):
@@ -214,21 +214,66 @@ class SPAScannedItemInputSerializer(serializers.Serializer):
             raise serializers.ValidationError("Only one of product_id or service_id must be provided, not both.")
         return data
 
+class SpaProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SpaProduct
+        fields = ['id', 'name', 'price', 'description', 'stock_quantity']  # include any other relevant fields
+
+class SPAScannedItemOutputSerializer(serializers.ModelSerializer):
+    product = SpaProductSerializer(read_only=True)
+    service = ServiceSerializer(read_only=True)
+
+    class Meta:
+        model = SPAScannedItem
+        fields = ['id', 'product', 'service', 'quantity', 'price_at_sale']
+
 
 class SPATransactionSerializer(serializers.ModelSerializer):
-    scanned_items = SPAScannedItemInputSerializer(many=True)
+    scanned_items = SPAScannedItemInputSerializer(many=True, write_only=True)
+    scanned_items_detail = SPAScannedItemOutputSerializer(many=True, read_only=True, source='scanned_items')
 
     class Meta:
         model = SPATransaction
-        fields = ['staff', 'subtotal', 'discount', 'customer_name', 'customer_contact', 'scanned_items']
+        fields = ['staff', 'subtotal', 'discount', 'customer_name', 'customer_contact', 'scanned_items', 'scanned_items_detail']
+
+    def create(self, validated_data):
+        scanned_items_data = validated_data.pop('scanned_items')
+        transaction = SPATransaction.objects.create(**validated_data)
+
+        for item_data in scanned_items_data:
+            product_id = item_data.get('product_id')
+            service_id = item_data.get('service_id')
+            quantity = item_data.get('quantity')
+
+            if product_id:
+                product = SpaProduct.objects.get(id=product_id)
+                price_at_sale = product.price
+                SPAScannedItem.objects.create(
+                    transaction=transaction,
+                    product=product,
+                    quantity=quantity,
+                    price_at_sale=price_at_sale
+                )
+            elif service_id:
+                service = Service.objects.get(id=service_id)
+                price_at_sale = service.price
+                SPAScannedItem.objects.create(
+                    transaction=transaction,
+                    service=service,
+                    quantity=quantity,
+                    price_at_sale=price_at_sale
+                )
+
+        return transaction
+
 
 
 class SPAScannedItemWithTransactionSerializer(serializers.ModelSerializer):
     transaction_code = serializers.CharField(source='transaction.code', read_only=True)
     transaction_time = serializers.DateTimeField(source='transaction.timestamp', read_only=True)
     staff = serializers.CharField(source='transaction.staff.user.username', read_only=True)
-    product_name = serializers.CharField(source='product.name', read_only=True, default=None)
-    service_name = serializers.CharField(source='service.name', read_only=True, default=None)
+    product =  SpaProductSerializer(read_only=True)
+    service = ServiceSerializer(read_only=True)
 
     class Meta:
         model = SPAScannedItem
@@ -237,8 +282,8 @@ class SPAScannedItemWithTransactionSerializer(serializers.ModelSerializer):
             'transaction_code',
             'transaction_time',
             'staff',
-            'product_name',
-            'service_name',
+            'product',
+            'service',
             'quantity',
             'price_at_sale'
         ]

@@ -184,6 +184,7 @@ class SPASalesView(APIView):
         with transaction.atomic():
             products_cache = {}
 
+            # Validate products and services without saving
             for item in scanned_items_data:
                 if 'product_id' in item:
                     try:
@@ -192,12 +193,11 @@ class SPASalesView(APIView):
                             return Response({
                                 "detail": f"Product '{product.name}' does not belong to your branch."
                             }, status=status.HTTP_400_BAD_REQUEST)
-                        products_cache[item['product_id']] = product
-
                         if item['quantity'] > product.stock_quantity:
                             return Response({
                                 "detail": f"Insufficient stock for {product.name}. Available: {product.stock_quantity}."
                             }, status=status.HTTP_400_BAD_REQUEST)
+                        products_cache[item['product_id']] = product
                     except SpaProduct.DoesNotExist:
                         return Response({"detail": f"Product ID {item['product_id']} not found."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -211,34 +211,25 @@ class SPASalesView(APIView):
                     except Service.DoesNotExist:
                         return Response({"detail": f"Service ID {item['service_id']} not found."}, status=status.HTTP_400_BAD_REQUEST)
 
+            # Delegate saving to serializer
             serializer = SPATransactionSerializer(data=request.data)
             if serializer.is_valid():
                 transaction_instance = serializer.save()
 
+                # Decrease product stock only after successful save
                 for item in scanned_items_data:
                     if 'product_id' in item:
                         product = products_cache[item['product_id']]
-                        SPAScannedItem.objects.create(
-                            transaction=transaction_instance,
-                            product=product,
-                            quantity=item['quantity'],
-                            price_at_sale=product.price
-                        )
                         product.stock_quantity -= item['quantity']
                         product.save()
 
-                    elif 'service_id' in item:
-                        service = Service.objects.get(id=item['service_id'])
-                        SPAScannedItem.objects.create(
-                            transaction=transaction_instance,
-                            service=service,
-                            quantity=item['quantity'],
-                            price_at_sale=service.price
-                        )
+                response_data = SPATransactionSerializer(transaction_instance).data
+                return Response(response_data, status=status.HTTP_201_CREATED)
 
-                return Response({"transaction_code": transaction_instance.code}, status=status.HTTP_201_CREATED)
+
 
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
     def get(self, request):
         today = timezone.now().date()
