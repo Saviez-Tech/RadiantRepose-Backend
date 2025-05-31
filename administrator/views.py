@@ -475,16 +475,16 @@ class SpaListAllSalesView(generics.ListAPIView):
     serializer_class = SpaScannedItemWithTransactionSerializer
 
     def get_queryset(self):
-        queryset = SPAScannedItem.objects.select_related('transaction').order_by('-transaction__id')
         filter_value = self.request.query_params.get('date', 'day')
         today = timezone.now().date()
+        queryset = SPAScannedItem.objects.select_related('transaction', 'product', 'service').order_by('-transaction__id')
 
         try:
-            # Try parsing as a date
+            # If 'date' param is an actual date string
             selected_date = datetime.strptime(filter_value, '%Y-%m-%d').date()
             return queryset.filter(transaction__timestamp__date=selected_date)
         except ValueError:
-            # Not a date, treat as keyword
+            # If 'date' param is a keyword
             if filter_value == 'day':
                 start_date = today
                 end_date = today + timedelta(days=1)
@@ -498,7 +498,7 @@ class SpaListAllSalesView(generics.ListAPIView):
                 start_date = today.replace(month=1, day=1)
                 end_date = start_date.replace(year=start_date.year + 1)
             else:
-                return SPAScannedItem.objects.none()  # Invalid filter
+                return SPAScannedItem.objects.none()
 
             return queryset.filter(transaction__timestamp__date__range=(start_date, end_date))
         
@@ -557,6 +557,40 @@ class SpaCategorySalesReportView(generics.GenericAPIView):
 class SpaProductView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]  # Ensure the user is authenticated and is an admin
     authentication_classes = [TokenAuthentication]
+
+
+    def get(self, request, product_id=None, branch_id=None):
+        if product_id:
+            try:
+                product = SpaProduct.objects.get(id=product_id)
+                if request.user.is_authenticated:
+                    try:
+                        worker = Worker.objects.get(user=request.user)
+                        # Check if product belongs to user's branch
+                        if product.branch != worker.branch:
+                            return Response({"detail": "Access denied. Product not in your branch."}, status=status.HTTP_403_FORBIDDEN)
+                    except Worker.DoesNotExist:
+                        product = SpaProduct.objects.get(id=product_id)
+                # If not authenticated or authorized, return product details
+                serializer = SpaProductSerializer(product)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except SpaProduct.DoesNotExist:
+                return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            if request.user.is_authenticated:
+                try:
+                    worker = Worker.objects.get(user=request.user)
+                    products = SpaProduct.objects.filter(branch=worker.branch)
+                except Worker.DoesNotExist:
+                    products = SpaProduct.objects.all()
+            elif branch_id:
+                products = SpaProduct.objects.filter(branch_id=branch_id)
+            else:
+                products = SpaProduct.objects.all()
+
+            serializer = SpaProductSerializer(products, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
 
     def post(self, request, *args, **kwargs):
         serializer = SpaProductSerializer(data=request.data)

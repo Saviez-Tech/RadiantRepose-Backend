@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from luxury.models import Product, LuxuryBranch, Transaction, ScannedItem,Worker
+from luxury.models import Product, LuxuryBranch, Transaction, ScannedItem,Worker,Service
 from luxury.serializers import WorkerSerializer, ProductSerializer,SPATransaction,SPAScannedItem
 
 
@@ -27,9 +27,16 @@ class SpaTransactionNestedSerializer(serializers.ModelSerializer):
             "id", "staff", "timestamp", "subtotal", 
             "discount", "customer_name", "customer_contact"]
         
+class SpaServiceSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model= Service
+        fields="__all__"
+        
 class SpaScannedItemWithTransactionSerializer(serializers.ModelSerializer):
     transaction = TransactionNestedSerializer()
     product =ProductSerializer()
+    service= SpaServiceSerializer()
     class Meta:
         model = SPAScannedItem
-        fields = ['id', 'product', 'quantity', 'price_at_sale', 'transaction']
+        fields = ['id', 'product', 'service','quantity', 'price_at_sale', 'transaction']

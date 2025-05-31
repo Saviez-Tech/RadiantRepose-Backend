@@ -27,7 +27,12 @@ urlpatterns = [
 
 
     #SPA ENDPOINTS
-    path('spa/total-goods-sold/',TotalSpaProductsSoldView.as_view(),name="spa-dashboard")
+    path('spa/total-goods-sold/',TotalSpaProductsSoldView.as_view(),name="spa-dashboard"),
+    path('spa/sales/',SpaListAllSalesView.as_view(),name='spa-sales'),
+    path('spa/category-sales-report/',SpaCategorySalesReportView.as_view(),name='sales-category-report'),
+    path('spa/products/', SpaProductView.as_view(), name='product-listss'),  # For listing and creating products
+    path('spa/products/<int:product_id>/', SpaProductView.as_view(), name='product-detailss'),  # For retrieving, updating, and deleting a specific product
+
 ] 
 
 

@@ -12,6 +12,7 @@ from django.http import Http404
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework.generics import ListAPIView
+from rest_framework.exceptions import NotFound
 
 # All Codes For the Luxury Section
 class SalesView(APIView):
@@ -164,6 +165,9 @@ class BookedServiceSearchView(APIView):
             return Response({"error": "Code query parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         booked_services = BookedService.objects.filter(code=code)
+        if not booked_services.exists():
+            raise NotFound(detail="No booked services found with the given code.")
+
         serializer = ListBookedServiceSerializer(booked_services, many=True)
         return Response(serializer.data)
 
