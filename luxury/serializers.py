@@ -323,3 +323,28 @@ class SPAScannedItemWithTransactionSerializer(serializers.ModelSerializer):
             'quantity',
             'price_at_sale'
         ]
+
+
+# Serializer for the code confirmation 
+
+class ServiceItemSerializer(serializers.ModelSerializer):
+    service_name = serializers.CharField(source='service.name')
+    service_image = serializers.CharField(source='service.image')
+    service_description = serializers.CharField(source='service.description')
+    service_price = serializers.DecimalField(source='service.price', max_digits=10, decimal_places=2)
+    service_duration = serializers.IntegerField(source='service.time_in_minutes')
+
+    class Meta:
+        model = SPAScannedItem
+        fields = "__all__"
+
+
+class SpaProductItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name')
+    product_image = serializers.CharField(source='product.image_url')
+    product_description = serializers.CharField(source='product.description')
+    product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2)
+
+    class Meta:
+        model = SPAScannedItem
+        fields = "__all__"

@@ -19,5 +19,9 @@ urlpatterns = [
 
     path('spa/sales/', SPASalesView.as_view(), name='spa-sales'),
     path('spa/products/', SpaProductDetailListView.as_view(), name='spa-product-list'),
-    path('spa/product/search/',SpaProductSearchView.as_view(),name="search-spa-product")
+    path('spa/product/search/',SpaProductSearchView.as_view(),name="search-spa-product"),
+    path('spa/services/<str:code>/', ServiceListByTransactionCode.as_view(), name='spa-services-by-code'),
+    path('spa/products/<str:code>/', ProductListByTransactionCode.as_view(), name='spa-products-by-code'),
+    path('spa/mark_done/<int:item_id>/', MarkSPAItemDone.as_view(), name='mark_spa_item_done'),
+
 ] 

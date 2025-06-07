@@ -32,7 +32,7 @@ urlpatterns = [
     path('spa/category-sales-report/',SpaCategorySalesReportView.as_view(),name='sales-category-report'),
     path('spa/products/', SpaProductView.as_view(), name='product-listss'),  # For listing and creating products
     path('spa/products/<int:product_id>/', SpaProductView.as_view(), name='product-detailss'),  # For retrieving, updating, and deleting a specific product
-
+    path('spa/completed/', CompletedSPAItemsList.as_view(), name='completed_spa_items_list'),
 ] 
 
 

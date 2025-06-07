@@ -215,6 +215,9 @@ class SPAScannedItem(models.Model):
     service = models.ForeignKey(Service, on_delete=models.CASCADE, null=True, blank=True)
     quantity = models.PositiveIntegerField()
     price_at_sale = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status=models.CharField(default="Pending")
+    done_by = models.ForeignKey(Worker, null=True, blank=True, on_delete=models.SET_NULL, related_name='completed_items')
+    done_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         item = self.product.name if self.product else self.service.name

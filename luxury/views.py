@@ -1,9 +1,9 @@
-from rest_framework import status
+from rest_framework import status,permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from .models import Transaction, ScannedItem, Product,Service,Booking,BookedService,SPAScannedItem,SPATransaction,SpaProduct
-from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer,BookingSerializer,ServiceSerializer,ListBookingSerializer,ListBookedServiceSerializer,SPAScannedItemInputSerializer,SPAScannedItemWithTransactionSerializer,SPATransactionSerializer,SpaProductSerializer
+from .serializers import SaleSerializer,SaleSerializerr,ScannedItemSerializer,ProductSerializer,ScannedItemWithTransactionSerializer,BookingSerializer,ServiceSerializer,ListBookingSerializer,ListBookedServiceSerializer,SPAScannedItemInputSerializer,SPAScannedItemWithTransactionSerializer,SPATransactionSerializer,SpaProductSerializer,ServiceItemSerializer,SpaProductItemSerializer
 from .models import Worker
 from django.utils import timezone
 from django.db import transaction
@@ -316,3 +316,76 @@ class SpaProductSearchView(generics.ListAPIView):
             )
 
         return queryset
+    
+class ServiceListByTransactionCode(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, code):
+        try:
+            worker = Worker.objects.get(user=request.user)
+        except Worker.DoesNotExist:
+            return Response({'error': 'Worker profile not found'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            transaction = SPATransaction.objects.get(code=code)
+        except SPATransaction.DoesNotExist:
+            return Response({'error': 'Transaction not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if transaction's staff branch == worker branch
+        if transaction.staff.branch != worker.branch:
+            return Response({'error': 'You do not have access to this transaction'}, status=status.HTTP_403_FORBIDDEN)
+
+        services = SPAScannedItem.objects.filter(transaction=transaction, service__isnull=False)
+        serializer = ServiceItemSerializer(services, many=True)  # Use ServiceItemSerializer, not ServiceSerializer!
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ProductListByTransactionCode(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, code):
+        try:
+            worker = Worker.objects.get(user=request.user)
+        except Worker.DoesNotExist:
+            return Response({'error': 'Worker profile not found'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            transaction = SPATransaction.objects.get(code=code)
+        except SPATransaction.DoesNotExist:
+            return Response({'error': 'Transaction not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if transaction's staff branch == worker branch
+        if transaction.staff.branch != worker.branch:
+            return Response({'error': 'You do not have access to this transaction'}, status=status.HTTP_403_FORBIDDEN)
+
+        products = SPAScannedItem.objects.filter(transaction=transaction, product__isnull=False)
+        serializer = SpaProductItemSerializer(products, many=True)  # Use ProductItemSerializer, not SpaProductSerializer!
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+class MarkSPAItemDone(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, item_id):
+        try:
+            worker = Worker.objects.get(user=request.user)
+        except Worker.DoesNotExist:
+            return Response({'error': 'Worker profile not found'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            item = SPAScannedItem.objects.select_related('transaction__staff__branch').get(id=item_id)
+        except SPAScannedItem.DoesNotExist:
+            return Response({'error': 'SPA item not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if worker belongs to same branch as transaction staff
+        if item.transaction.staff.branch != worker.branch:
+            return Response({'error': 'You do not have access to this item'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Mark as Done
+        item.status = "Done"
+        item.done_by = worker
+        item.done_at = timezone.now()
+        item.save()
+
+        return Response({'message': 'SPA item marked as Done'}, status=status.HTTP_200_OK)
+
+

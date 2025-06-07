@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from rest_framework import generics
-from rest_framework import status
+from rest_framework import status,permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from luxury.models import Product, LuxuryBranch,ScannedItem,Transaction,Worker,SPAScannedItem,SPATransaction,SpaProduct
@@ -646,3 +646,40 @@ class SpaProductView(APIView):
 
         except SpaProduct.DoesNotExist:
             return Response({"detail": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+
+#  for listing all services and products sold and the worker that did it
+class CompletedSPAItemsList(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        try:
+            worker = Worker.objects.get(user=request.user)
+        except Worker.DoesNotExist:
+            return Response({'error': 'Worker profile not found'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get all done items for this worker's branch
+        items = SPAScannedItem.objects.filter(
+            status="Done",
+            transaction__staff__branch=worker.branch
+        ).select_related('transaction', 'service', 'done_by')
+
+        # Build response
+        data = []
+        for item in items:
+            service_name = item.service.name if item.service else (item.product.name if item.product else "")
+            done_time = item.done_at.strftime("%I:%M %p") if item.done_at else ""
+            done_date = item.done_at.strftime("%b %d, %Y") if item.done_at else ""
+            done_by_name = item.done_by.name if item.done_by else ""
+
+            data.append({
+                'unique_code': item.transaction.code,
+                'service': service_name,
+                'time': done_time,
+                'date': done_date,
+                'staff': done_by_name,
+                'amount': f"N{item.price_at_sale}",
+            })
+
+        return Response(data, status=status.HTTP_200_OK)
+
