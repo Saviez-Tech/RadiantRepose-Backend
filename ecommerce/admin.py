@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BuyersInfo, Order
+from .models import BuyersInfo, Order,ContactMessage,NewsletterSubscriber
 
 class OrderInline(admin.TabularInline):
     model = Order
@@ -9,3 +9,7 @@ class OrderInline(admin.TabularInline):
 class BuyersInfoAdmin(admin.ModelAdmin):
     list_display = ['full_name', 'email', 'phone', 'city', 'state', 'country']
     inlines = [OrderInline]
+
+
+admin.site.register(NewsletterSubscriber)
+admin.site.register(ContactMessage)

@@ -6,7 +6,7 @@ from rest_framework import status
 from .serializers import BuyersInfoSerializer
 from rest_framework import generics,permissions
 from .models import BuyersInfo,Order
-from .serializers import OrderSerializer,NewOrderSerializer,ProductSummarySerializer,CustomerOrdersSerializer
+from .serializers import OrderSerializer,NewOrderSerializer,ProductSummarySerializer,CustomerOrdersSerializer,ContactMessageSerializer,NewsletterSubscriberSerializer
 from rest_framework.views import APIView
 from luxury.models import Product
 
@@ -213,3 +213,22 @@ def verify_payment(request, reference):
 
     except Exception as e:
         return Response({"status": "error", "message": str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([])
+def contact_message_create(request):
+    serializer = ContactMessageSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({'message': 'Your message has been sent successfully.'}, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([])
+def subscribe_newsletter(request):
+    serializer = NewsletterSubscriberSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({'message': 'Successfully subscribed to newsletter.'}, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

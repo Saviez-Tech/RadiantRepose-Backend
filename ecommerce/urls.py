@@ -11,4 +11,6 @@ urlpatterns = [
     path("paystack/init/", initialize_payment, name="initialize-payment"),
     path("paystack/verify/<str:reference>/", verify_payment, name="verify-payment"),
     path('webhook/paystack/', paystack_webhook, name='paystack-webhook'),
+    path('contact/', contact_message_create, name='contact-message-create'),
+    path('newsletter/subscribe/', subscribe_newsletter, name='subscribe-newsletter'),
 ] 

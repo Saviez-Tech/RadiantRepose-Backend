@@ -1,6 +1,6 @@
 # serializers.py
 from rest_framework import serializers
-from .models import BuyersInfo, Order
+from .models import BuyersInfo, Order,ContactMessage,NewsletterSubscriber
 from django.db import transaction
 from luxury.serializers import ProductSerializer
 
@@ -84,3 +84,14 @@ class CustomerOrdersSerializer(serializers.Serializer):
     customer = BuyersInfoSerializer()
     products = ProductSummarySerializer(many=True)
 
+
+class ContactMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactMessage
+        fields = '__all__'
+
+
+class NewsletterSubscriberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NewsletterSubscriber
+        fields = ['email']
