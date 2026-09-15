@@ -58,3 +58,19 @@ class CustomerLoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("Your account has been disabled.")
 
         return user
+
+
+
+TRANSACTION_TYPE_CHOICES = ("luxury", "spa")
+
+
+class ClaimTransactionPointsSerializer(serializers.Serializer):
+    referral_id = serializers.CharField()
+    transaction_id = serializers.IntegerField()
+    transaction_type = serializers.ChoiceField(choices=TRANSACTION_TYPE_CHOICES)
+
+
+class SubmitReferralSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15)
+    referral_code = serializers.CharField(max_length=30)
+    staff_id = serializers.IntegerField(required=False, allow_null=True)
