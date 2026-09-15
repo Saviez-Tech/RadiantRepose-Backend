@@ -74,3 +74,10 @@ class SubmitReferralSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=15)
     referral_code = serializers.CharField(max_length=30)
     staff_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class ReducePointsSerializer(serializers.Serializer):
+    referral_id = serializers.CharField()
+    amount = serializers.IntegerField(min_value=1)
+    note = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    staff_id = serializers.IntegerField(required=False, allow_null=True)

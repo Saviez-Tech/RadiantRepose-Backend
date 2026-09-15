@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny,IsAuthenticated
 from rest_framework.exceptions import ValidationError
 from .serializers import CustomerRegisterSerializer, CustomerLoginSerializer
 from django.db import transaction as db_transaction, IntegrityError
@@ -15,7 +15,7 @@ from .models import (
     POSReferralRecord,
     ClaimedTransaction
 )
-from .serializers import ClaimTransactionPointsSerializer, SubmitReferralSerializer
+from .serializers import ClaimTransactionPointsSerializer, SubmitReferralSerializer,ReducePointsSerializer
 from .utils import calculate_points, get_point_balance, REFERRAL_BONUS_POINTS
 from luxury.models import Worker,Transaction,SPATransaction
 
@@ -245,3 +245,104 @@ class SubmitReferralView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+
+ 
+class MyReferralsAndPointsHistoryView(APIView):
+    """
+    For the currently logged-in customer: everyone they've referred, and
+    their full points history (both points added and points deducted).
+    """
+    permission_classes = [IsAuthenticated]
+ 
+    def get(self, request):
+        profile = get_object_or_404(CustomerProfile, user=request.user)
+ 
+        referrals = POSReferralRecord.objects.filter(
+            referred_by_profile=profile
+        ).order_by("-timestamp")
+        referrals_data = [
+            {
+                "id": r.id,
+                "phone_number": r.phone_number,
+                "referral_code": r.referral_code,
+                "note": r.note,
+                "staff": r.staff.name if r.staff else None,
+                "timestamp": r.timestamp,
+            }
+            for r in referrals
+        ]
+ 
+        point_logs = CustomerPointLog.objects.filter(customer=profile).order_by("-timestamp")
+        point_history_data = [
+            {
+                "id": log.id,
+                "title": log.title,
+                "points": log.points,
+                "type": "added" if log.points >= 0 else "deducted",
+                "timestamp": log.timestamp,
+            }
+            for log in point_logs
+        ]
+ 
+        return Response(
+            {
+                "referral_id": profile.referral_id,
+                "phone_number": profile.phone_number,
+                "balance": get_point_balance(profile),
+                "total_referrals": referrals.count(),
+                "referrals": referrals_data,
+                "point_history": point_history_data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+ 
+class ReducePointsView(APIView):
+    """
+    Debits points from a customer, identified by their referral_id.
+    Meant for staff use (e.g. redeeming points against a purchase).
+    """
+    permission_classes = [AllowAny]  # tighten to staff-only auth as needed
+ 
+    def post(self, request):
+        serializer = ReducePointsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+ 
+        referral_id = data["referral_id"]
+        amount = data["amount"]
+        note = data.get("note") or "Points redeemed"
+        staff_id = data.get("staff_id")
+ 
+        customer = get_object_or_404(CustomerProfile, referral_id=referral_id)
+ 
+        current_balance = get_point_balance(customer)
+        if amount > current_balance:
+            return Response(
+                {"detail": f"Insufficient points. Current balance is {current_balance}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+ 
+        staff = None
+        if staff_id:
+            staff = get_object_or_404(Worker, id=staff_id)
+ 
+        title = f"{note} (by {staff.name})" if staff else note
+ 
+        CustomerPointLog.objects.create(
+            customer=customer,
+            title=title,
+            points=-amount,
+        )
+ 
+        return Response(
+            {
+                "detail": "Points deducted successfully.",
+                "points_deducted": amount,
+                "new_balance": get_point_balance(customer),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+ 
