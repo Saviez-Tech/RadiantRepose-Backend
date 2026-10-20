@@ -1,8 +1,13 @@
 # views.py
+import hashlib
+import hmac
+
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
+from django.conf import settings
+from django.db import transaction
 from .serializers import BuyersInfoSerializer
 from rest_framework import generics,permissions
 from .models import BuyersInfo,Order
@@ -11,7 +16,6 @@ from rest_framework.views import APIView
 from luxury.models import Product
 
 import requests
-from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 
 @api_view(['POST'])
@@ -46,20 +50,53 @@ def create_order_and_initialize_payment(request):
             "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
             "Content-Type": "application/json",
         }
+        headers["Authorization"] = f"Bearer {settings.PAYSTACK_SECRET_KEY}"
         data = {
             "email": buyer.email,
             "amount": int(total_amount * 100),  # convert to kobo
             # Optional: "callback_url": "https://yourdomain.com/payment/verify/"
         }
 
-        response = requests.post("https://api.paystack.co/transaction/initialize", json=data, headers=headers)
-        paystack_data = response.json()
+        try:
+            response = requests.post(
+                "https://api.paystack.co/transaction/initialize",
+                json=data,
+                headers=headers,
+                timeout=15,
+            )
+            response.raise_for_status()
+            paystack_data = response.json()
+        except requests.RequestException:
+            buyer.delete()
+            return Response(
+                {"detail": "Could not connect to Paystack to initialize payment."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        except ValueError:
+            buyer.delete()
+            return Response(
+                {"detail": "Paystack returned an invalid payment initialization response."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        if not paystack_data.get('status'):
+            buyer.delete()
+            return Response(
+                {"detail": paystack_data.get('message') or "Paystack could not initialize payment."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         # Extract the payment reference and save it to the buyer
-        reference = paystack_data.get('data', {}).get('reference')
-        if reference:
-            buyer.reference = reference
-            buyer.save()
+        payment_data = paystack_data.get('data') or {}
+        reference = payment_data.get('reference')
+        if not reference or not payment_data.get('authorization_url'):
+            buyer.delete()
+            return Response(
+                {"detail": "Paystack did not return a payment reference and checkout URL."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        buyer.reference = reference
+        buyer.save()
 
         return Response({
             "buyer": BuyersInfoSerializer(buyer).data,
@@ -75,36 +112,84 @@ def create_order_and_initialize_payment(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def paystack_webhook(request):
-    # Paystack sends event data in request body
+    signature = request.headers.get('x-paystack-signature', '')
+    expected_signature = hmac.new(
+        settings.PAYSTACK_SECRET_KEY.encode(),
+        request.body,
+        hashlib.sha512,
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected_signature):
+        return Response({'detail': 'Invalid Paystack signature'}, status=status.HTTP_401_UNAUTHORIZED)
+
     event = request.data
 
-    # You might want to verify event['event'] is 'charge.success'
     if event.get('event') == 'charge.success':
-        # Extract reference from the event data
-        reference = event['data'].get('reference')
+        event_data = event.get('data') or {}
+        reference = event_data.get('reference')
 
         if not reference:
             return Response({'detail': 'Reference not found in webhook data'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if event_data.get('status') != 'success':
+            return Response({'detail': 'Event ignored'}, status=status.HTTP_200_OK)
+
+        return confirm_paid_orders(reference)
+
+    return Response({'detail': 'Event ignored'}, status=status.HTTP_200_OK)
+
+
+def confirm_paid_orders(reference):
+    with transaction.atomic():
         try:
-            # Find the buyer using the reference
-            buyer = BuyersInfo.objects.get(reference=reference)
+            buyer = BuyersInfo.objects.select_for_update().get(reference=reference)
         except BuyersInfo.DoesNotExist:
             return Response({'detail': 'Order with this reference not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Update payment status on buyer and orders
-        # You can add extra checks like payment amount, currency, status etc.
-        buyer_payment_success = event['data'].get('status') == 'success'
+        orders = list(
+            Order.objects.select_for_update()
+            .filter(transaction=buyer)
+            .order_by('product_id', 'id')
+        )
+        if not orders:
+            return Response({'detail': 'No orders found for this payment'}, status=status.HTTP_404_NOT_FOUND)
 
-        if buyer_payment_success:
-            buyer.save()  # if you want to update any buyer fields
-            orders = Order.objects.filter(transaction=buyer)
-            orders.update(payment=True)
+        if all(order.payment for order in orders):
+            return Response({'detail': 'Payment already confirmed'}, status=status.HTTP_200_OK)
 
-            return Response({'detail': 'Payment confirmed and orders updated'}, status=status.HTTP_200_OK)
+        quantities_by_product = {}
+        unpaid_orders = [order for order in orders if not order.payment]
+        for order in unpaid_orders:
+            quantities_by_product[order.product_id] = (
+                quantities_by_product.get(order.product_id, 0) + order.quantity
+            )
 
-    # For other event types or failed payments, just acknowledge
-    return Response({'detail': 'Event ignored'}, status=status.HTTP_200_OK)
+        products = {
+            product.pk: product
+            for product in Product.objects.select_for_update()
+            .filter(pk__in=quantities_by_product)
+            .order_by('pk')
+        }
+        for product_id, quantity in quantities_by_product.items():
+            product = products[product_id]
+            if quantity > product.stock_quantity:
+                return Response(
+                    {
+                        'detail': (
+                            f'Payment succeeded, but there is insufficient stock for '
+                            f'{product.name}. The order requires manual follow-up.'
+                        )
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+        for product_id, quantity in quantities_by_product.items():
+            product = products[product_id]
+            product.stock_quantity -= quantity
+            product.save(update_fields=['stock_quantity'])
+
+        Order.objects.filter(pk__in=[order.pk for order in unpaid_orders]).update(payment=True)
+
+    return Response({'detail': 'Payment confirmed, orders updated, and stock reduced'}, status=status.HTTP_200_OK)
 
 
 class BuyersWithPendingOrdersList(generics.ListAPIView):
@@ -130,6 +215,7 @@ class BuyerOrdersDetail(generics.GenericAPIView):
         customer_data = BuyersInfoSerializer(orders.first().transaction).data
         products_data = ProductSummarySerializer(orders, many=True).data
 
+        headers["Authorization"] = f"Bearer {settings.PAYSTACK_SECRET_KEY}"
         data = {
             "customer": customer_data,
             "products": products_data
@@ -189,6 +275,7 @@ def verify_payment(request, reference):
     headers = {
         "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
     }
+    headers["Authorization"] = f"Bearer {settings.PAYSTACK_SECRET_KEY}"
     url = f"https://api.paystack.co/transaction/verify/{reference}"
     try:
         response = requests.get(url, headers=headers)
@@ -196,6 +283,11 @@ def verify_payment(request, reference):
 
         if result["status"] and result["data"]["status"] == "success":
             data = result["data"]
+            if BuyersInfo.objects.filter(reference=reference).exists():
+                confirmation = confirm_paid_orders(reference)
+                if confirmation.status_code != status.HTTP_200_OK:
+                    return confirmation
+
             return Response({
                 "status": "success",
                 "reference": data["reference"],
