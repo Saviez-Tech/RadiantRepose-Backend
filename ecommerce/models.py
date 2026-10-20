@@ -23,6 +23,25 @@ class Order(models.Model):
     price_at_sale = models.DecimalField(max_digits=10, decimal_places=2,default=0)
     status = models.CharField(max_length=10,default='pending')
     payment=models.BooleanField(default=False)
+
+
+class Preorder(models.Model):
+    full_name = models.CharField(max_length=50)
+    email = models.EmailField()
+    phone = models.CharField(max_length=16)
+    street_address = models.CharField(max_length=50)
+    zip_code = models.CharField(max_length=50)
+    city = models.CharField(max_length=50)
+    state = models.CharField(max_length=50)
+    country = models.CharField(max_length=50)
+    reference = models.CharField(max_length=100, blank=True, null=True, unique=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='preorder_orders')
+    quantity = models.PositiveIntegerField(default=1)
+    price_at_order = models.DecimalField(max_digits=10, decimal_places=2)
+    note = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=10, default='pending')
+    payment = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
     
 
 

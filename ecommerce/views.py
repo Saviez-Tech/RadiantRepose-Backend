@@ -8,12 +8,23 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from .serializers import BuyersInfoSerializer
 from rest_framework import generics,permissions
-from .models import BuyersInfo,Order
-from .serializers import OrderSerializer,NewOrderSerializer,ProductSummarySerializer,CustomerOrdersSerializer,ContactMessageSerializer,NewsletterSubscriberSerializer
+from .models import BuyersInfo, Order, Preorder
+from .serializers import (
+    OrderSerializer,
+    NewOrderSerializer,
+    ProductSummarySerializer,
+    CustomerOrdersSerializer,
+    ContactMessageSerializer,
+    NewsletterSubscriberSerializer,
+    PreorderCheckoutSerializer,
+    PreorderSerializer,
+)
 from rest_framework.views import APIView
 from luxury.models import Product
+from luxury.serializers import ProductSerializer
 
 import requests
 from django.views.decorators.csrf import csrf_exempt
@@ -133,6 +144,9 @@ def paystack_webhook(request):
         if event_data.get('status') != 'success':
             return Response({'detail': 'Event ignored'}, status=status.HTTP_200_OK)
 
+        if Preorder.objects.filter(reference=reference).exists():
+            return confirm_preorder_payment(reference, event_data.get('amount'))
+
         return confirm_paid_orders(reference)
 
     return Response({'detail': 'Event ignored'}, status=status.HTTP_200_OK)
@@ -192,6 +206,40 @@ def confirm_paid_orders(reference):
     return Response({'detail': 'Payment confirmed, orders updated, and stock reduced'}, status=status.HTTP_200_OK)
 
 
+def confirm_preorder_payment(reference, paid_amount):
+    try:
+        paid_amount = int(paid_amount)
+    except (TypeError, ValueError):
+        return Response(
+            {'detail': 'Payment amount is missing or invalid'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    with transaction.atomic():
+        try:
+            preorder = Preorder.objects.select_for_update().get(reference=reference)
+        except Preorder.DoesNotExist:
+            return Response({'detail': 'Preorder with this reference not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        expected_amount = int(preorder.price_at_order * preorder.quantity * 100)
+        if paid_amount != expected_amount:
+            return Response(
+                {'detail': 'Payment amount does not match the preorder total'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if preorder.payment:
+            return Response({'detail': 'Preorder payment already confirmed'}, status=status.HTTP_200_OK)
+
+        preorder.payment = True
+        preorder.save(update_fields=['payment'])
+
+    return Response(
+        {'detail': 'Preorder payment confirmed', 'reference': reference},
+        status=status.HTTP_200_OK,
+    )
+
+
 class BuyersWithPendingOrdersList(generics.ListAPIView):
     serializer_class = BuyersInfoSerializer
 
@@ -199,6 +247,145 @@ class BuyersWithPendingOrdersList(generics.ListAPIView):
         return BuyersInfo.objects.filter(
             order__status='pending', order__payment=True
         ).distinct()
+
+
+class PreorderProductsList(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = ProductSerializer
+
+    def get_queryset(self):
+        return Product.objects.filter(preorder=True).select_related('branch').order_by('id')
+
+
+class PreorderProductSearchList(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = ProductSerializer
+    result_limit = 10
+
+    def get_queryset(self):
+        query = self.request.query_params.get('q', '').strip()
+        if not query:
+            return Product.objects.none()
+
+        return (
+            Product.objects.filter(preorder=True)
+            .filter(Q(name__icontains=query) | Q(category__icontains=query))
+            .select_related('branch')
+            .order_by('name', 'id')[:self.result_limit]
+        )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_preorder_and_initialize_payment(request):
+    serializer = PreorderCheckoutSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    validated_data = serializer.validated_data
+    product = validated_data['product']
+    amount = int(product.preorder_price * validated_data['quantity'] * 100)
+    headers = {
+        'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}',
+        'Content-Type': 'application/json',
+    }
+    try:
+        response = requests.post(
+            'https://api.paystack.co/transaction/initialize',
+            json={'email': validated_data['email'], 'amount': amount},
+            headers=headers,
+            timeout=15,
+        )
+        response.raise_for_status()
+        paystack_data = response.json()
+    except requests.RequestException:
+        return Response(
+            {'detail': 'Could not connect to Paystack to initialize preorder payment.'},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    except ValueError:
+        return Response(
+            {'detail': 'Paystack returned an invalid payment initialization response.'},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    if not paystack_data.get('status'):
+        return Response(
+            {'detail': paystack_data.get('message') or 'Paystack could not initialize preorder payment.'},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    payment_data = paystack_data.get('data') or {}
+    reference = payment_data.get('reference')
+    if not reference or not payment_data.get('authorization_url'):
+        return Response(
+            {'detail': 'Paystack did not return a preorder reference and checkout URL.'},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    preorder = serializer.save(
+        reference=reference,
+        price_at_order=product.preorder_price,
+    )
+    return Response(
+        {
+            'preorder': PreorderSerializer(preorder).data,
+            'payment': paystack_data,
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def verify_preorder_payment(request, reference):
+    headers = {'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}'}
+    try:
+        response = requests.get(
+            f'https://api.paystack.co/transaction/verify/{reference}',
+            headers=headers,
+            timeout=15,
+        )
+        response.raise_for_status()
+        result = response.json()
+    except requests.RequestException:
+        return Response(
+            {'detail': 'Could not connect to Paystack to verify preorder payment.'},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    except ValueError:
+        return Response(
+            {'detail': 'Paystack returned an invalid verification response.'},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    payment_data = result.get('data') or {}
+    if (
+        not result.get('status')
+        or payment_data.get('status') != 'success'
+        or payment_data.get('reference') != reference
+    ):
+        return Response(
+            {
+                'status': 'failed',
+                'message': payment_data.get('gateway_response', 'Payment not successful'),
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    confirmation = confirm_preorder_payment(reference, payment_data.get('amount'))
+    if confirmation.status_code != status.HTTP_200_OK:
+        return confirmation
+
+    return Response({
+        'status': 'success',
+        'reference': reference,
+        'amount': payment_data.get('amount', 0) / 100,
+        'currency': payment_data.get('currency'),
+        'email': (payment_data.get('customer') or {}).get('email'),
+        'transaction_date': payment_data.get('transaction_date'),
+        'gateway_response': payment_data.get('gateway_response'),
+    })
     
 
 class BuyerOrdersDetail(generics.GenericAPIView):

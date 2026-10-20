@@ -1,7 +1,8 @@
 # serializers.py
 from rest_framework import serializers
-from .models import BuyersInfo, Order,ContactMessage,NewsletterSubscriber
+from .models import BuyersInfo, Order, Preorder, ContactMessage,NewsletterSubscriber
 from django.db import transaction
+from luxury.models import Product
 from luxury.serializers import ProductSerializer
 
 
@@ -63,6 +64,38 @@ class BuyersInfoSerializer(serializers.ModelSerializer):
                 )
 
         return buyer
+
+
+class PreorderCheckoutSerializer(serializers.ModelSerializer):
+    product = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.filter(preorder=True)
+    )
+    quantity = serializers.IntegerField(min_value=1, default=1)
+
+    class Meta:
+        model = Preorder
+        fields = [
+            'full_name', 'email', 'phone', 'street_address', 'zip_code',
+            'city', 'state', 'country', 'product', 'quantity', 'note',
+        ]
+        extra_kwargs = {'note': {'required': False, 'allow_null': True}}
+
+    def validate(self, attrs):
+        if attrs['product'].preorder_price <= 0:
+            raise serializers.ValidationError({
+                'product': 'This product does not have a valid preorder price.'
+            })
+        return attrs
+
+
+class PreorderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Preorder
+        fields = [
+            'id', 'full_name', 'email', 'phone', 'street_address', 'zip_code',
+            'city', 'state', 'country', 'reference', 'product', 'quantity',
+            'price_at_order', 'note', 'status', 'payment', 'created_at',
+        ]
 
 
 class NewOrderSerializer(serializers.ModelSerializer):

@@ -17,6 +17,8 @@ from rest_framework.authentication import TokenAuthentication
 import urllib.parse
 from rest_framework.exceptions import ValidationError
 from .serializers import ScannedItemWithTransactionSerializer,SpaScannedItemWithTransactionSerializer
+from ecommerce.models import Preorder
+from ecommerce.serializers import PreorderSerializer
 
 from django.db.models import Sum, F
 import calendar
@@ -24,6 +26,37 @@ import calendar
 supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
 # Create your views here.
+
+class AdminPreordersList(generics.ListAPIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    serializer_class = PreorderSerializer
+    queryset = Preorder.objects.select_related('product').order_by('-created_at')
+
+
+class MarkPreorderDeliveredView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def patch(self, request, preorder_id):
+        try:
+            preorder = Preorder.objects.get(pk=preorder_id)
+        except Preorder.DoesNotExist:
+            return Response(
+                {'detail': 'Preorder not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not preorder.payment:
+            return Response(
+                {'detail': 'A preorder must be paid before it can be marked as delivered.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if preorder.status != 'delivered':
+            preorder.status = 'delivered'
+            preorder.save(update_fields=['status'])
+
+        return Response(PreorderSerializer(preorder).data, status=status.HTTP_200_OK)
+
 
 class ProductView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]  # Ensure the user is authenticated and is an admin
@@ -682,4 +715,3 @@ class CompletedSPAItemsList(APIView):
             })
 
         return Response(data, status=status.HTTP_200_OK)
-
