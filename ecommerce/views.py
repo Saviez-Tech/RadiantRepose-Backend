@@ -215,7 +215,7 @@ class BuyerOrdersDetail(generics.GenericAPIView):
         customer_data = BuyersInfoSerializer(orders.first().transaction).data
         products_data = ProductSummarySerializer(orders, many=True).data
 
-        headers["Authorization"] = f"Bearer {settings.PAYSTACK_SECRET_KEY}"
+        
         data = {
             "customer": customer_data,
             "products": products_data
