@@ -41,6 +41,8 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     stock_quantity = models.PositiveIntegerField(default=0)
     barcode = models.CharField(max_length=100, unique=True)
+    preorder = models.BooleanField(default=False)
+    preorder_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     branch = models.ForeignKey(LuxuryBranch, on_delete=models.CASCADE)
 
     def upload_image_to_supabase(self):
